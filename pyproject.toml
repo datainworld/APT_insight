@@ -1,0 +1,39 @@
+[project]
+name = "apt-insight-04"
+version = "0.1.0"
+description = "수도권 아파트 실거래가·매물 분석 + LangGraph 멀티 에이전트"
+requires-python = ">=3.13"
+
+dependencies = [
+    # LLM / Agent
+    "langchain>=1.0,<2.0",
+    "langchain-core>=1.0,<2.0",
+    "langgraph>=1.0,<2.0",
+    "langchain-google-genai",
+    "langchain-community",
+    "langchain-postgres",
+    "langsmith>=0.3.0",
+    # DB
+    "sqlalchemy",
+    "psycopg[binary]",
+    "pgvector",
+    # Web UI
+    "chainlit",
+    "plotly",
+    # PDF
+    "pymupdf",
+    # Pipeline
+    "requests",
+    "curl-cffi",
+    "xmltodict",
+    "pandas",
+    "python-dateutil",
+    "python-dotenv",
+    "haversine",
+    "thefuzz",
+    "beautifulsoup4",
+    # Google GenAI (임베딩 직접 호출)
+    "google-genai",
+    "ipykernel>=7.2.0",
+    "nbformat>=5.10.4",
+]

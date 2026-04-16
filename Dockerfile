@@ -1,0 +1,33 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# 시스템 패키지
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv 설치
+RUN pip install --no-cache-dir uv
+
+# 의존성 설치
+COPY pyproject.toml uv.lock ./
+RUN uv pip install --system .
+
+# 소스 코드
+COPY shared/ ./shared/
+COPY pipeline/ ./pipeline/
+COPY agents/ ./agents/
+COPY scripts/ ./scripts/
+COPY app.py chainlit.md ./
+COPY public/ ./public/
+COPY .chainlit/ ./.chainlit/
+
+# uploads 디렉토리
+RUN mkdir -p /app/uploads /app/data
+
+EXPOSE 8000
+
+# 기본: Chainlit 앱 실행 (pipeline 서비스에서 CMD override)
+CMD ["chainlit", "run", "app.py", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Data
+data/
+
+# Chainlit
+.files/
+
+# Notebook
+test.ipynb
+
+# OS
+.DS_Store
+Thumbs.db

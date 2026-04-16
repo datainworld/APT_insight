@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="200" viewBox="0 0 800 200">
+  <text x="400" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="64" font-weight="700" fill="#e0e0e0">APT Insight</text>
+  <text x="400" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" fill="#999">수도권 아파트 실거래가 / 매물 / 뉴스 종합 분석</text>
+  <text x="400" y="178" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" fill="#777">아래 예시를 클릭하거나 질문을 입력하세요</text>
+</svg>

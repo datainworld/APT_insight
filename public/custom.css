@@ -1,0 +1,6 @@
+/* 로고 영역 크기 제한 해제 */
+img[src*="logo"] {
+  max-height: none !important;
+  max-width: 500px !important;
+  height: auto !important;
+}
