@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS rt_trade (
     registration_date       VARCHAR(20)                -- 신고일
 );
 COMMENT ON TABLE rt_trade IS '아파트 매매 실거래가 (국토부 API, 36개월 rolling) — 변동률은 SQL 윈도우 함수로 계산';
+ALTER TABLE rt_trade DROP CONSTRAINT IF EXISTS rt_trade_natural_uq;
+ALTER TABLE rt_trade ADD CONSTRAINT rt_trade_natural_uq
+    UNIQUE (apt_id, deal_date, deal_amount, exclusive_area, floor);
 CREATE INDEX IF NOT EXISTS idx_rt_trade_apt_date ON rt_trade (apt_id, deal_date);
 CREATE INDEX IF NOT EXISTS idx_rt_trade_date ON rt_trade (deal_date);
 CREATE INDEX IF NOT EXISTS idx_rt_trade_area_amount ON rt_trade (exclusive_area, deal_amount);
@@ -59,6 +62,9 @@ CREATE TABLE IF NOT EXISTS rt_rent (
     contract_type   VARCHAR(50)                -- 계약 유형 (신규/갱신)
 );
 COMMENT ON TABLE rt_rent IS '아파트 전월세 실거래가 (국토부 API, 36개월 rolling) — monthly_rent=0이면 전세, 환산보증금은 SQL로 계산';
+ALTER TABLE rt_rent DROP CONSTRAINT IF EXISTS rt_rent_natural_uq;
+ALTER TABLE rt_rent ADD CONSTRAINT rt_rent_natural_uq
+    UNIQUE (apt_id, deal_date, deposit, monthly_rent, exclusive_area, floor);
 CREATE INDEX IF NOT EXISTS idx_rt_rent_apt_date ON rt_rent (apt_id, deal_date);
 CREATE INDEX IF NOT EXISTS idx_rt_rent_deposit ON rt_rent (deposit);
 
