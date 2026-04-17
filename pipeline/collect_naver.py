@@ -1,58 +1,35 @@
-"""네이버 부동산 매물 수집 스크립트.
+"""네이버 부동산 매물 초기 수집 스크립트 (교재 10~13장).
+
+최초 전체 수집(full)만 담당. 일일 증분은 `update_nv_daily.py`, 매핑은 `build_mapping.py`.
 
 사용법:
-    python -m pipeline.collect_naver full               # 최초 전체 수집
-    python -m pipeline.collect_naver daily              # 매일 증분 수집
-    python -m pipeline.collect_naver daily --resume     # 체크포인트 이어받기
-    python -m pipeline.collect_naver full --skip-db     # DB 저장 생략
-    python -m pipeline.collect_naver full --test        # 테스트 모드
-    python -m pipeline.collect_naver mapping            # 단지 매핑 실행
+    python -m pipeline.collect_naver              # 전체 수집
+    python -m pipeline.collect_naver --skip-db    # DB 저장 생략
+    python -m pipeline.collect_naver --test       # 테스트 모드 (10개 동, 20단지)
+    python -m pipeline.collect_naver --resume     # 체크포인트 이어받기
 """
 
 import os
 import re
 import json
 import time
-import random
 import argparse
-import threading
 
 import pandas as pd
 import requests as std_requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from curl_cffi import requests as curl_requests
 from sqlalchemy import text
-from haversine import haversine, Unit
-from thefuzz import fuzz
 
-from shared.config import KAKAO_API_KEY, NAVER_LAND_COOKIE
+from shared.config import KAKAO_API_KEY
 from shared.db import get_engine
 from pipeline.utils import get_latest_file, get_today_str, DATA_DIR
+from pipeline.naver_session import BASE_URL, request_json
 
 
 # ==============================================================================
 # 상수
 # ==============================================================================
-
-BASE_URL = "https://new.land.naver.com/api"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://new.land.naver.com/",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "ko-KR,ko;q=0.9",
-    "sec-ch-ua": '"Chromium";v="131", "Not_A Brand";v="24"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin",
-}
 
 SIDO_CODES = {
     "서울특별시": "1100000000",
@@ -62,96 +39,8 @@ SIDO_CODES = {
 
 TRADE_TYPES = {"A1": "매매", "B1": "전세", "B2": "월세"}
 
-MIN_DELAY = 0.8
-MAX_DELAY = 3.5
-MAX_RETRIES = 5
-MAX_WORKERS = 8
+MAX_WORKERS = 12  # 네이버 수집 병렬도 (adaptive delay가 429 감지 시 자동 조절)
 CHECKPOINT_INTERVAL = 200
-
-_delay_lock = threading.Lock()
-_current_delay = 1.5
-
-
-# ==============================================================================
-# HTTP 세션
-# ==============================================================================
-
-_session = curl_requests.Session(impersonate="chrome")
-_session.headers.update(HEADERS)
-_session_initialized = False
-
-
-def _init_session() -> None:
-    global _session_initialized
-    if _session_initialized:
-        return
-
-    print("  세션 초기화 중...")
-    try:
-        resp = _session.get("https://new.land.naver.com/", timeout=30)
-        token_match = re.search(r'"token"\s*:\s*"([^"]+)"', resp.text)
-        if token_match:
-            _session.headers["authorization"] = f"Bearer {token_match.group(1)}"
-            print(f"    JWT 토큰 획득")
-        time.sleep(2)
-    except Exception as e:
-        print(f"    메인 페이지 방문 실패: {e}")
-
-    if NAVER_LAND_COOKIE:
-        for part in NAVER_LAND_COOKIE.split(";"):
-            part = part.strip()
-            if "=" in part:
-                key, _, val = part.partition("=")
-                _session.cookies.set(key.strip(), val.strip())
-
-    _session_initialized = True
-    print("  세션 초기화 완료")
-
-
-def _adjust_delay(success: bool) -> None:
-    global _current_delay
-    with _delay_lock:
-        if success:
-            _current_delay = max(MIN_DELAY, _current_delay * 0.95)
-        else:
-            _current_delay = min(MAX_DELAY, _current_delay * 1.5)
-
-
-def _request_with_retry(url: str, params: dict | None = None,
-                         retries: int = MAX_RETRIES) -> dict | None:
-    _init_session()
-
-    for attempt in range(retries):
-        try:
-            with _delay_lock:
-                delay = _current_delay
-            time.sleep(delay + random.uniform(0, 0.3))
-
-            resp = _session.get(url, params=params, timeout=30)
-
-            if resp.status_code == 429:
-                _adjust_delay(False)
-                wait = (2 ** attempt) * 5
-                print(f"  Rate limit (429). {attempt + 1}/{retries}회 재시도, {wait}s 대기")
-                time.sleep(wait)
-                continue
-
-            if resp.status_code == 404:
-                _adjust_delay(True)
-                return None
-
-            resp.raise_for_status()
-            _adjust_delay(True)
-            return resp.json()
-
-        except Exception as e:
-            if attempt < retries - 1:
-                wait = (2 ** attempt) * 2
-                print(f"  요청 실패 ({attempt + 1}/{retries}): {e}, {wait}s 후 재시도")
-                time.sleep(wait)
-            else:
-                print(f"  최종 실패: {url}")
-    return None
 
 
 # ==============================================================================
@@ -185,7 +74,7 @@ def _parse_price(price_str: str | None) -> int:
 def _collect_sido_dongs(sido_name: str, sido_code: str) -> tuple[list[dict], int]:
     """단일 시도의 시군구→읍면동 코드를 수집한다 (병렬 워커용)."""
     dongs = []
-    data = _request_with_retry(f"{BASE_URL}/regions/list", {"cortarNo": sido_code})
+    data = request_json(f"{BASE_URL}/regions/list", {"cortarNo": sido_code})
     if not data or "regionList" not in data:
         return dongs, 0
 
@@ -193,7 +82,7 @@ def _collect_sido_dongs(sido_name: str, sido_code: str) -> tuple[list[dict], int
     for sgg in sgg_list:
         sgg_code = sgg.get("cortarNo", "")
         sgg_name = sgg.get("cortarName", "")
-        dong_data = _request_with_retry(f"{BASE_URL}/regions/list", {"cortarNo": sgg_code})
+        dong_data = request_json(f"{BASE_URL}/regions/list", {"cortarNo": sgg_code})
         if not dong_data or "regionList" not in dong_data:
             continue
 
@@ -251,7 +140,7 @@ def get_active_complexes(dong_list: list[dict],
         if (i + 1) % 50 == 0 or i == 0:
             print(f"  진행: {i + 1}/{len(targets)} ({dong['sgg_name']} {dong['dong_name']})")
 
-        data = _request_with_retry(
+        data = request_json(
             f"{BASE_URL}/regions/complexes",
             {"cortarNo": dong["dong_code"], "realEstateType": "APT", "order": ""},
         )
@@ -362,7 +251,7 @@ def _fetch_articles(complex_no: str, trade_type: str) -> list[dict]:
     articles = []
     page = 1
     while page <= 10:
-        data = _request_with_retry(
+        data = request_json(
             f"{BASE_URL}/articles/complex/{complex_no}",
             {"realEstateType": "APT", "tradeType": trade_type,
              "page": page, "sameAddressGroup": "false"},
@@ -687,119 +576,12 @@ def cleanup_old_files() -> None:
 
 
 # ==============================================================================
-# 매핑: apt_id ↔ complex_no
-# ==============================================================================
-
-def _clean_name(name) -> str:
-    if pd.isna(name) or not name:
-        return ""
-    name = re.sub(r"\(.*?\)", "", str(name))
-    name = re.sub(r"\s+", "", name)
-    return name.replace("아파트", "").replace("마을", "").replace("단지", "")
-
-
-def run_mapping() -> None:
-    """rt_complex ↔ nv_complex 매핑을 실행한다."""
-    print("=" * 60)
-    print("  단지 매핑 (apt_id ↔ complex_no)")
-    print("=" * 60)
-
-    engine = get_engine()
-
-    print("[1] DB 로드...")
-    try:
-        with engine.connect() as conn:
-            df_apt = pd.read_sql(
-                "SELECT apt_id, apt_name, latitude, longitude FROM rt_complex", conn
-            )
-            df_naver = pd.read_sql(
-                "SELECT complex_no, complex_name, latitude, longitude FROM nv_complex", conn
-            )
-    except Exception as e:
-        print(f"DB 로드 실패: {e}")
-        return
-
-    print(f"  rt_complex: {len(df_apt)}건, nv_complex: {len(df_naver)}건")
-
-    df_apt = df_apt.dropna(subset=["latitude", "longitude"]).copy()
-    df_naver = df_naver.dropna(subset=["latitude", "longitude"]).copy()
-
-    df_apt["clean_name"] = df_apt["apt_name"].apply(_clean_name)
-    df_naver["clean_name"] = df_naver["complex_name"].apply(_clean_name)
-
-    print("[2] 공간+텍스트 매핑...")
-    mappings = []
-    start_time = time.time()
-
-    for count, (_, row_apt) in enumerate(df_apt.iterrows(), 1):
-        lat_a, lon_a = row_apt["latitude"], row_apt["longitude"]
-
-        candidates = df_naver[
-            (df_naver["latitude"].between(lat_a - 0.005, lat_a + 0.005)) &
-            (df_naver["longitude"].between(lon_a - 0.005, lon_a + 0.005))
-        ]
-
-        best_match, best_score, best_method = None, 0, ""
-
-        for _, row_n in candidates.iterrows():
-            dist_m = haversine(
-                (lat_a, lon_a), (row_n["latitude"], row_n["longitude"]), unit=Unit.METERS
-            )
-            if dist_m > 300:
-                continue
-
-            sim = fuzz.token_set_ratio(row_apt["clean_name"], row_n["clean_name"])
-
-            if dist_m < 50 and sim > 40:
-                score = 100 - dist_m + sim
-                if score > best_score:
-                    best_score, best_match, best_method = score, row_n, "DISTANCE"
-
-            elif sim >= 70 and dist_m <= 300:
-                score = sim + (300 - dist_m) / 10
-                if score > best_score:
-                    best_score, best_match, best_method = score, row_n, "NAME_SIMILARITY"
-
-        if best_match is not None:
-            mappings.append({
-                "apt_id": row_apt["apt_id"],
-                "naver_complex_no": best_match["complex_no"],
-                "mapping_method": best_method,
-                "confidence_score": round(best_score, 2),
-            })
-
-        if count % 2000 == 0:
-            print(f"  진행: {count}/{len(df_apt)} ({time.time() - start_time:.1f}s)")
-
-    df_mapping = pd.DataFrame(mappings)
-    print(f"\n[결과] {len(df_apt)}개 중 {len(df_mapping)}개 매핑 완료")
-
-    if not df_mapping.empty:
-        print("[3] DB 저장...")
-        with engine.begin() as conn:
-            df_mapping.to_sql("complex_mapping_staging", conn, if_exists="replace", index=False)
-            conn.execute(text("""
-                INSERT INTO complex_mapping (apt_id, naver_complex_no, mapping_method, confidence_score)
-                SELECT apt_id, naver_complex_no, mapping_method, confidence_score
-                FROM complex_mapping_staging
-                ON CONFLICT (apt_id) DO UPDATE SET
-                    naver_complex_no = EXCLUDED.naver_complex_no,
-                    mapping_method = EXCLUDED.mapping_method,
-                    confidence_score = EXCLUDED.confidence_score,
-                    created_at = CURRENT_TIMESTAMP;
-            """))
-            conn.execute(text("DROP TABLE IF EXISTS complex_mapping_staging;"))
-        print("  DB 저장 완료")
-
-
-# ==============================================================================
 # 메인
 # ==============================================================================
 
-def main(mode: str = "full", skip_db: bool = False,
-         test_mode: bool = False, resume: bool = False) -> None:
+def main(skip_db: bool = False, test_mode: bool = False, resume: bool = False) -> None:
     print("=" * 60)
-    print(f"  네이버 매물 수집 [{mode.upper()}]")
+    print("  네이버 매물 초기 수집 [FULL]")
     print("=" * 60)
 
     dong_list, _ = get_cortars()
@@ -812,18 +594,10 @@ def main(mode: str = "full", skip_db: bool = False,
         print("단지 수집 실패.")
         return
 
-    if mode == "daily":
-        complex_file = get_latest_file("naver_complex_*.csv")
-        if not complex_file:
-            print("기존 naver_complex 파일 없음. full 모드를 먼저 실행하세요.")
-            return
-        existing_df = pd.read_csv(complex_file)
-        complexes, df_complex, _ = sync_complexes(complexes, existing_df)
-    else:
-        complexes = convert_to_admin_dong(complexes)
-        df_complex = pd.DataFrame(complexes.values())
+    complexes = convert_to_admin_dong(complexes)
+    df_complex = pd.DataFrame(complexes.values())
 
-    df_listing, stats = collect_listings_incremental(complexes, test_mode, resume)
+    df_listing, _stats = collect_listings_incremental(complexes, test_mode, resume)
     save_results_csv(df_complex, df_listing)
 
     if not skip_db:
@@ -840,20 +614,11 @@ def main(mode: str = "full", skip_db: bool = False,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="네이버 매물 수집")
-    sub = parser.add_subparsers(dest="mode")
-    sub.required = True
-
-    for name in ("full", "daily"):
-        p = sub.add_parser(name)
-        p.add_argument("--skip-db", action="store_true")
-        p.add_argument("--test", action="store_true")
-        p.add_argument("--resume", action="store_true")
-
-    sub.add_parser("mapping")
+    parser = argparse.ArgumentParser(
+        description="네이버 매물 초기 수집 (일일 증분은 pipeline.update_nv_daily, 매핑은 pipeline.build_mapping)"
+    )
+    parser.add_argument("--skip-db", action="store_true")
+    parser.add_argument("--test", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
-
-    if args.mode == "mapping":
-        run_mapping()
-    else:
-        main(args.mode, args.skip_db, args.test, args.resume)
+    main(args.skip_db, args.test, args.resume)
