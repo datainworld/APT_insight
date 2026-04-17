@@ -16,15 +16,16 @@ GitHub: `https://github.com/datainworld/APT_insight`
 
 - Python 3.13-slim 베이스
 - uv로 의존성 설치
-- 단일 이미지로 app + pipeline 역할 겸용 (CMD override로 구분)
+- 단일 이미지로 app + 파이프라인 스크립트 실행 겸용 (Schedule의 Command override로 구분)
 - EXPOSE 8000, 기본 CMD는 `chainlit run`
 
 ### docker-compose.yml (로컬/참고용)
 
 - `db` (pgvector/pgvector:0.8.0-pg18)
-- `app` (Chainlit, 8000)
-- `pipeline` (sleep infinity, Dokploy 스케줄러용)
-- volumes: pgdata, uploads, pipeline_data
+- `app` (Chainlit, 8000) — `run_daily` 포함, Dokploy Schedule도 app 서비스에서 실행
+- volumes: pgdata, uploads, app_data
+
+_구 `pipeline` 서비스는 2026-04-17 제거됨 (역할 중복). 자세한 내용은 phase6_refactor 참고._
 
 ## VPS 배포 절차
 

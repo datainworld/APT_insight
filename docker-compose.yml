@@ -23,20 +23,9 @@ services:
       - db
     volumes:
       - uploads:/app/uploads
-
-  pipeline:
-    build: .
-    restart: unless-stopped
-    command: ["sleep", "infinity"]
-    env_file: .env
-    environment:
-      POSTGRES_HOST: db
-    depends_on:
-      - db
-    volumes:
-      - pipeline_data:/app/data
+      - app_data:/app/data
 
 volumes:
   pgdata:
   uploads:
-  pipeline_data:
+  app_data:
