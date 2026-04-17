@@ -53,42 +53,41 @@ def _extract_text(content) -> str:
 # 노드
 # ==============================================================================
 
+REWRITE_PROMPT = (
+    "이전 대화를 반영해 마지막 사용자 질문을 혼자서도 이해 가능한 "
+    "완전한 한국어 문장 한 줄로 재작성하세요. "
+    "지시대명사·생략된 지역/기간/거래유형을 이전 대화의 구체 값으로 채우되, "
+    "새 주제(다른 지역명 등)가 명시되면 이전 맥락은 버리세요. "
+    "인사나 짧은 잡담은 그대로 반환하세요. "
+    "오직 질문 한 줄만 출력. 설명·따옴표·prefix 금지."
+)
+
+
 QUERY_GENERATOR_PROMPT = """당신은 부동산 질문 분석가입니다. 사용자 질문을 분석하여 3개 에이전트 각각에 적합한 질의를 생성하세요.
 
 ## 에이전트 역할
 
 1. **sql_agent** — DB에서 아파트 실거래가·전월세·매물 수치 데이터를 조회합니다.
-   - 특정 지역/단지의 매매가, 전세가, 거래량, 평균가, 최고가 등 수치 질문
-   - 네이버 매물 호가, 매물 수, 거래유형별 통계
-   - 시군구/행정동별 비교, 면적별 가격, 기간별 추이 데이터
-
 2. **news_agent** — 네이버 검색 API로 최신 부동산 뉴스를 실시간 검색합니다.
-   - 시장 동향, 정책 변화, 금리, 규제, 공급 계획 등 최신 뉴스
-   - 전문가 전망, 여론, 사회 이슈
-
 3. **rag_agent** — 사용자가 업로드한 PDF 문서에서 관련 내용을 검색합니다.
-   - 부동산 정책 보고서, 시장 분석 리포트, 연구 자료 등
 
 ## 출력 형식
 
-반드시 아래 JSON 형식으로만 답하세요. 다른 텍스트를 포함하지 마세요.
+반드시 아래 JSON 형식으로만 답하세요.
 
 ```json
 {
-  "sql_query": "SQL 에이전트에게 보낼 구체적인 질의 (불필요하면 null)",
-  "news_query": "News 에이전트에게 보낼 검색 키워드/질의 (불필요하면 null)",
-  "rag_query": "RAG 에이전트에게 보낼 문서 검색 질의 (불필요하면 null)"
+  "sql_query": "SQL 에이전트에게 보낼 질의 (불필요하면 null)",
+  "news_query": "News 에이전트에게 보낼 질의 (불필요하면 null)",
+  "rag_query": "RAG 에이전트에게 보낼 질의 (불필요하면 null)"
 }
 ```
 
 ## 규칙
 
-- 가급적 3개 에이전트 모두에게 질의를 생성하여 종합적인 답변이 가능하도록 하세요.
-- 각 에이전트의 역할에 맞게 질의를 변환하세요. 예를 들어:
-  - "강남 아파트 전망은?" → sql: "강남구 최근 3개월 매매 평균가 추이", news: "강남 아파트 시장 전망", rag: "강남 아파트 시장 분석"
-- 단순 인사나 시스템 질문(안녕하세요, 뭘 할 수 있어?)은 3개 모두 null로 설정하세요.
-- sql_query는 DB 조회에 적합한 구체적 질문으로 작성하세요 (지역명, 기간, 수치 요청 포함).
-- news_query는 뉴스 검색에 적합한 키워드 중심으로 작성하세요.
+- 가급적 3개 모두 질의를 생성해 종합적 답변이 가능하게 하되, 맥락상 불필요하면 null.
+- 단순 인사(안녕하세요, 뭘 할 수 있어?)는 3개 모두 null.
+- 입력에 지역명이 있으면 그 지역명을 모든 질의에 유지하세요.
 """
 
 
@@ -106,14 +105,33 @@ def _parse_json(raw: str) -> dict | None:
         return None
 
 
+def _rewrite_to_standalone(llm, messages: list[AnyMessage]) -> str:
+    """이전 대화를 반영해 마지막 사용자 질문을 standalone 질문으로 재작성.
+
+    첫 턴이면 원문 그대로 반환. 단순 전처리이므로 query_generator 내부에서만 사용.
+    """
+    last_content = messages[-1].content if messages else ""
+    if len(messages) <= 1:
+        return last_content
+
+    recent = messages[-8:]
+    hint = HumanMessage(content=f"[마지막 질문] {last_content}")
+    response = llm.invoke([SystemMessage(content=REWRITE_PROMPT), *recent[:-1], hint])
+    rewritten = _extract_text(response.content).strip().strip('"').strip("'")
+    return rewritten or last_content
+
+
 def query_generator(state: SupervisorState) -> dict:
-    """사용자 질문을 분석하여 각 에이전트에 맞는 질의를 생성한다."""
+    """사용자 질문을 분석하여 각 에이전트에 맞는 질의를 생성한다.
+
+    이전 대화가 있으면 먼저 standalone 질문으로 재작성한 뒤 라우팅 질의를 생성한다.
+    """
     llm = get_llm()
-    user_content = state["messages"][-1].content
+    user_content = _rewrite_to_standalone(llm, state["messages"])
 
     response = llm.invoke([
         SystemMessage(content=QUERY_GENERATOR_PROMPT),
-        state["messages"][-1],
+        HumanMessage(content=user_content),
     ])
     queries = _parse_json(_extract_text(response.content))
 
@@ -188,6 +206,9 @@ def synthesize(state: SupervisorState) -> dict:
     if state.get("news_result"):
         parts.append(f"[뉴스 검색 결과]\n{state['news_result']}")
 
+    # 최근 맥락 (이전 대화 흐름 반영용). 마지막 사용자 질문 포함.
+    recent = state["messages"][-8:]
+
     # direct (인사/일반 대화) — 에이전트 결과 없음
     if not parts:
         greeting_prompt = SystemMessage(content=(
@@ -196,20 +217,21 @@ def synthesize(state: SupervisorState) -> dict:
             "DB 조회, 뉴스 검색, PDF 검색 없이는 부동산 관련 구체적 수치나 뉴스를 답할 수 없습니다.\n"
             "부동산 질문이라면 다시 질문해달라고 안내하세요."
         ))
-        response = llm.invoke([greeting_prompt, state["messages"][-1]])
+        response = llm.invoke([greeting_prompt, *recent])
         return {"messages": [AIMessage(content=_extract_text(response.content))]}
 
     context = "\n\n".join(parts)
     prompt = SystemMessage(content=(
-        "아래 에이전트 결과를 종합하여 사용자 질문에 답변하세요.\n\n"
+        "아래 에이전트 결과를 종합하여 사용자의 마지막 질문에 답변하세요.\n\n"
         "규칙:\n"
         "- 반드시 각 정보의 출처를 명시하세요: (DB 조회), (뉴스), (PDF 문서) 등.\n"
         "- 서브에이전트가 반환한 날짜·수치를 절대로 임의로 변경하지 마세요.\n"
         "- PDF 검색 결과가 없다는 내용은 답변에 포함하지 마세요.\n"
+        "- 이전 대화의 맥락(지역, 기간, 관심사)을 자연스럽게 이어가세요.\n"
         "- 한국어로 답변하세요.\n\n"
         f"{context}"
     ))
-    response = llm.invoke([prompt, state["messages"][-1]])
+    response = llm.invoke([prompt, *recent])
     return {"messages": [AIMessage(content=_extract_text(response.content))]}
 
 
@@ -238,6 +260,8 @@ def create_supervisor_graph(checkpointer=None):
     """Supervisor StateGraph를 컴파일하여 반환한다.
 
     query_generator → [sql_node + news_node + rag_node] (병렬) → synthesize → END
+
+    query_generator는 내부적으로 standalone 재작성(이전 대화 있을 때)을 먼저 수행한다.
     """
     builder = StateGraph(SupervisorState)
 

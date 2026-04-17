@@ -7,12 +7,14 @@
 import json
 import os
 import shutil
+import uuid
 
 import chainlit as cl
 import plotly.graph_objects as go
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.checkpoint.memory import InMemorySaver
 
 from agents.config import get_vector_store
 from agents.graph import create_supervisor_graph, _extract_text
@@ -102,8 +104,10 @@ async def set_starters() -> list[cl.Starter]:
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
-    graph = create_supervisor_graph()
+    # 세션 수명 동안만 유지되는 멀티턴 메모리 (브라우저 새로고침·재접속 시 초기화)
+    graph = create_supervisor_graph(checkpointer=InMemorySaver())
     cl.user_session.set("graph", graph)
+    cl.user_session.set("thread_id", str(uuid.uuid4()))
 
 
 @cl.on_message
@@ -121,6 +125,7 @@ async def on_message(message: cl.Message) -> None:
 
     # ── 에이전트 질의 처리 ──
     graph = cl.user_session.get("graph")
+    thread_id = cl.user_session.get("thread_id")
 
     final_msg = cl.Message(content="")
     await final_msg.send()
@@ -129,7 +134,7 @@ async def on_message(message: cl.Message) -> None:
 
     async for event in graph.astream(
         {"messages": [HumanMessage(content=message.content)]},
-        {"recursion_limit": 50},
+        {"recursion_limit": 50, "configurable": {"thread_id": thread_id}},
         stream_mode="updates",
     ):
         for node_name, update in event.items():
