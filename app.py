@@ -26,6 +26,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 _NODE_LABELS: dict[str, str] = {
     "query_generator": "> 질의 생성",
     "sql_node": "> DB 조회",
+    "chart_node": "> 시각화",
     "rag_node": "> PDF 검색",
     "news_node": "> 뉴스 검색",
     "synthesize": "> 답변 종합",
@@ -167,7 +168,18 @@ async def on_message(message: cl.Message) -> None:
                 await step.send()
                 await step.update()
 
-            # ── synthesize: 최종 답변 + 차트 ──
+            # ── chart_node: 시각화 생성 여부를 Step으로 표시 ──
+            elif node_name == "chart_node":
+                step = cl.Step(name=_NODE_LABELS[node_name], type="tool")
+                if update.get("chart_data"):
+                    chart_data = update["chart_data"]
+                    step.output = "차트 생성 완료"
+                else:
+                    step.output = "차트 불필요"
+                await step.send()
+                await step.update()
+
+            # ── synthesize: 최종 답변 ──
             elif node_name == "synthesize":
                 msgs = update.get("messages", [])
                 if msgs:
@@ -176,16 +188,13 @@ async def on_message(message: cl.Message) -> None:
                         final_msg.content = text
                         await final_msg.update()
 
-                if update.get("chart_data"):
-                    chart_data = update["chart_data"]
-
     await final_msg.update()
 
-    # ── Plotly 차트 렌더링 ──
+    # ── 시각화 렌더링 (Plotly Figure JSON) ──
     if chart_data:
         try:
             fig = go.Figure(json.loads(chart_data))
             chart_elem = cl.Plotly(figure=fig, name="chart")
             await cl.Message(content="", elements=[chart_elem]).send()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[chart render error] {e}", flush=True)

@@ -25,6 +25,9 @@ DATABASE_URL: str = (
 # LLM
 LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "google")
 LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-3.1-flash-lite")
+# 지시 준수 능력이 중요한 단계(query_generator, synthesize)용 상위 모델
+# 비우면 LLM_MODEL과 동일
+LLM_MODEL_SYNTHESIS: str = os.getenv("LLM_MODEL_SYNTHESIS", LLM_MODEL)
 
 # Embedding
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")

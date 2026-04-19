@@ -24,6 +24,9 @@ COPY app.py chainlit.md ./
 COPY public/ ./public/
 COPY .chainlit/ ./.chainlit/
 
+# 정적 자원 (지도 GeoJSON 등) — /app/data 는 Dokploy 볼륨이 덮으므로 별도 경로로 복사
+COPY data/maps/ ./assets/maps/
+
 # uploads 디렉토리
 RUN mkdir -p /app/uploads /app/data
 

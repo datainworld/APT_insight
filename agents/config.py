@@ -20,16 +20,17 @@ INCLUDE_TABLES: list[str] = [
 ]
 
 
-def get_llm() -> BaseChatModel:
-    """환경변수(LLM_PROVIDER/LLM_MODEL)에 따라 LLM 인스턴스를 반환한다."""
+def get_llm(model: str | None = None) -> BaseChatModel:
+    """LLM 인스턴스를 반환한다. model 인자 없으면 LLM_MODEL 기본값."""
+    model_name = model or LLM_MODEL
     if LLM_PROVIDER == "google":
-        return ChatGoogleGenerativeAI(model=LLM_MODEL)
+        return ChatGoogleGenerativeAI(model=model_name)
     elif LLM_PROVIDER == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=LLM_MODEL)
+        return ChatOpenAI(model=model_name)
     elif LLM_PROVIDER == "anthropic":
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=LLM_MODEL)
+        return ChatAnthropic(model=model_name)
     else:
         raise ValueError(f"지원하지 않는 LLM_PROVIDER: {LLM_PROVIDER}")
 
