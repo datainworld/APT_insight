@@ -20,8 +20,9 @@ build/
 uploads/*
 !uploads/.gitkeep
 
-# Data
-data/
+# Data (runtime only; static map assets are tracked)
+data/*
+!data/maps/
 
 # Chainlit
 .files/
