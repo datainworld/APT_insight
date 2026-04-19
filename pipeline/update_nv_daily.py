@@ -14,7 +14,6 @@ MIN_DELAY 0.8 → 0.5 조정 (교재 18장 운영 수집용).
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 
 import pandas as pd
 from sqlalchemy.engine import Engine
@@ -28,6 +27,7 @@ from pipeline.collect_naver import (
     sync_complexes,
 )
 from pipeline.naver_session import set_min_delay
+from pipeline.utils import now_kst
 from shared.db import get_engine
 
 
@@ -97,7 +97,7 @@ def load_yesterday_active(engine: Engine) -> dict[str, dict]:
 
 def _collect_raw_today(complexes: dict) -> list[dict]:
     """단지별 매물을 병렬 수집 (A1+B1+B2). 생명주기 필드는 `_collect_one_complex` 기본값."""
-    today_date = datetime.now().strftime("%Y-%m-%d")
+    today_date = now_kst().strftime("%Y-%m-%d")
     total = len(complexes)
     results: list[dict] = []
     done = 0
@@ -160,7 +160,7 @@ def main(sample: int | None = None) -> dict:
     print(f"  오늘 수집: {len(today_list):,}건")
 
     # 5. 순수함수 diff
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = now_kst().strftime("%Y-%m-%d")
     records, stats = diff_listings(yesterday, today_list, today_str)
     print(f"\n[diff] 신규 {stats['new']:,} / 가격변경 {stats['changed']:,} / "
           f"유지 {stats['kept']:,} / 종료 {stats['closed']:,}")

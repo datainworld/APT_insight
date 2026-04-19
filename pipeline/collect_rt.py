@@ -12,11 +12,10 @@ import time
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil.relativedelta import relativedelta
-from datetime import datetime
 
 from pipeline.utils import (
     fetch_data, parse_api_items, get_kakao_coords, build_address,
-    save_to_csv, get_today_str, DATA_DIR,
+    save_to_csv, get_today_str, now_kst, DATA_DIR,
 )
 
 
@@ -49,7 +48,7 @@ LAWD_CODES = [
 
 def _get_month_list(months_back: int = 36) -> list[str]:
     """현재로부터 months_back 개월치 YYYYMM 목록을 반환한다."""
-    today = datetime.now()
+    today = now_kst()
     return sorted(
         (today - relativedelta(months=i)).strftime("%Y%m")
         for i in range(months_back + 1)

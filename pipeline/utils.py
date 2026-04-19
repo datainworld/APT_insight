@@ -10,7 +10,15 @@ import re
 import glob
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import unquote
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def now_kst() -> datetime:
+    """KST 기준 현재 시각. VPS가 UTC여도 날짜가 한국 시간과 일치하도록."""
+    return datetime.now(KST)
 
 import pandas as pd
 import requests
@@ -154,8 +162,8 @@ def build_address(row) -> str:
 # ==============================================================================
 
 def get_today_str() -> str:
-    """오늘 날짜를 YYYYMMDD 형식으로 반환."""
-    return datetime.now().strftime("%Y%m%d")
+    """오늘 날짜를 YYYYMMDD 형식으로 반환 (KST)."""
+    return now_kst().strftime("%Y%m%d")
 
 
 def save_to_csv(data_list: list[dict], filename: str) -> None:

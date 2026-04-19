@@ -14,15 +14,15 @@ import json
 import sys
 import time
 import traceback
-from datetime import datetime
 
 from pipeline.update_nv_daily import main as update_nv
 from pipeline.update_rt_daily import main as update_rt
+from pipeline.utils import now_kst
 from shared.config import BASE_DIR
 
 
 def main(nv_sample: int | None = None) -> None:
-    started_at = datetime.now()
+    started_at = now_kst()
     report: dict = {
         "date": started_at.strftime("%Y-%m-%d"),
         "started_at": started_at.isoformat(timespec="seconds"),
@@ -62,7 +62,7 @@ def main(nv_sample: int | None = None) -> None:
     else:
         report["status"] = "error"
 
-    finished_at = datetime.now()
+    finished_at = now_kst()
     report["finished_at"] = finished_at.isoformat(timespec="seconds")
     report["elapsed_seconds"] = round(time.time() - t0, 1)
 

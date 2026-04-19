@@ -17,13 +17,12 @@ import argparse
 
 import pandas as pd
 import requests as std_requests
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy import text
 
 from shared.config import KAKAO_API_KEY
 from shared.db import get_engine
-from pipeline.utils import get_latest_file, get_today_str, DATA_DIR
+from pipeline.utils import get_latest_file, get_today_str, now_kst, DATA_DIR
 from pipeline.naver_session import BASE_URL, request_json
 
 
@@ -348,7 +347,7 @@ def collect_listings_incremental(complexes: dict,
                                   resume: bool = False) -> tuple[pd.DataFrame, dict]:
     """단지별 매물을 병렬 수집하고 증분 비교한다."""
     print("\n[Step 4] 매물 증분 수집")
-    today_date = datetime.now().strftime("%Y-%m-%d")
+    today_date = now_kst().strftime("%Y-%m-%d")
 
     # 기존 매물 로드 (증분 비교)
     existing_articles: dict[str, dict] = {}

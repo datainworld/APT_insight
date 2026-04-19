@@ -11,7 +11,6 @@ FK 순서: 신규 단지(rt_complex) 등록 → rt_trade → rt_rent → cleanup
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -24,7 +23,7 @@ from pipeline.schemas import (
     convert_to_trade_schema,
     extract_complex_info,
 )
-from pipeline.utils import build_address, get_kakao_coords
+from pipeline.utils import build_address, get_kakao_coords, now_kst
 from shared.db import get_engine
 
 TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
@@ -33,7 +32,7 @@ RENT_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcApt
 
 def get_recent_months(n: int = 3) -> list[str]:
     """오늘로부터 최근 n개월 YYYYMM 오름차순 리스트."""
-    today = datetime.now()
+    today = now_kst()
     return sorted((today - relativedelta(months=i)).strftime("%Y%m") for i in range(n))
 
 
