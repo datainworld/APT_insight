@@ -314,11 +314,117 @@ def news_node(state):
 
 ---
 
+## 8. rt_complex 에 시군구 컬럼 추가 (마포구 이슈)
+
+### 발견
+
+성능 개선 직후 "최근 마포구 최고가 거래 아파트는?" 질의에 "조회되지 않고 있습니다" 응답. SQL 은 정상 실행되었으나 **0행** 반환.
+
+### 원인
+
+`rt_complex` 스키마 점검 결과 지역 정보가 **`admin_dong` 하나뿐**. 시군구 컬럼 부재:
+
+```
+apt_id | apt_name | build_year | road_address | jibun_address | lat | lon | admin_dong
+```
+
+저장된 주소도 시·구 prefix 가 빠져있음:
+- `jibun_address`: "평창동 108" (시·구 없음)
+- `road_address`: "평창문화로 156" (시·구 없음)
+- `admin_dong`: "평창동" (행정동 단위)
+
+결과적으로 `sgg_name='마포구'` 필터링이 원천적으로 불가능. LLM 이 여러 컬럼 중 어떤 것도 "마포구" 를 포함하지 않아 0행 반환.
+
+### 숨겨진 단서
+
+`apt_id` 가 `"11440-2246"` 형식. 앞 5자리가 **국토부 LAWD_CD** (법정동 코드).  마포구 = `11440`. 즉 `apt_id LIKE '11440-%'` 로는 가능하나 LLM 이 이 관행을 모름.
+
+### 수정
+
+**A. `pipeline/lawd.py` 신규** — LAWD_CD → `(sido_name, sgg_name)` 매핑 80개.
+
+매핑 도출 방법: `complex_mapping` 으로 rt ↔ nv 연결된 단지에서 `LEFT(apt_id, 5)` ↔ `nv_complex.sgg_name` 를 그룹핑하여 빈도 최다 sgg 를 선택. **99.99% 커버리지** (15,037/15,061 중 매핑 가능, 1개 `41593` 화성시 세부 + 24개 비정형 apt_id 만 NULL).
+
+```python
+LAWD_SGG: dict[str, tuple[str, str]] = {
+    "11110": ("서울특별시", "종로구"),
+    "11440": ("서울특별시", "마포구"),
+    ...
+}
+```
+
+**B. `scripts/add_sgg_columns.py` 신규** — 멱등 마이그레이션:
+
+1. `ALTER TABLE rt_complex ADD COLUMN sido_name VARCHAR(20), sgg_name VARCHAR(30)` (존재하면 skip)
+2. `UPDATE rt_complex SET sgg_name = ... WHERE LEFT(apt_id, 5) = ...` 를 LAWD_CD 별 반복
+3. `CREATE INDEX IF NOT EXISTS idx_rt_complex_sgg ON rt_complex(sgg_name)`
+
+`--dry` 플래그로 영향 범위만 출력 가능.
+
+**C. `pipeline/update_rt_daily.py`** — 신규 단지 insert 시 `LAWD_SGG.get(apt_id[:5])` 로 sgg 동시 저장. 앞으로 수집되는 데이터는 자동 채워짐.
+
+**D. `agents/sql_agent.py`** — 스키마 프롬프트에 새 컬럼 명시 + "시·구 필터는 `WHERE sgg_name = '...'` 직접 사용" 힌트 추가.
+
+### 검증
+
+로컬·Remote 모두 15,036 행 백필 성공. 동일 질의로 마포구 264 단지 인식, 최고가 한강푸르지오 168㎡ 32억원 (2026-02-05) 정상 반환.
+
+---
+
+## 9. Recency 일관성 (세 소스 간)
+
+### 발견
+
+"최근 마포구 최고가 아파트" 응답에 **2025-11-29 뉴스 기사** (5개월 전) 가 인용됨. News 에이전트 `_MAX_AGE_DAYS = 180` 필터가 "최근" 질의에 과도하게 관대.
+
+더 나아가, **SQL·News·RAG 세 소스의 시간 처리가 제각각**:
+- News 는 `pubDate` 로 필터 (180일 → 60일 조정)
+- SQL 은 시간 필터를 query_generator 가 매번 재량으로 넣거나 누락
+- RAG 는 시간 개념 자체가 없음 (업로드 시점 불명)
+
+소스마다 "recency" 기준이 달라 답변의 시점 일관성이 깨짐.
+
+### 수정
+
+**A. News 필터 타이트닝** — `_MAX_AGE_DAYS: 180 → 60`. 부동산 뉴스는 1~2개월 이후 stale. 결과 없으면 "관련 최신 뉴스 부족" 메시지로 synthesize 가 뉴스 섹션을 자연스럽게 생략.
+
+**B. `QUERY_GENERATOR_PROMPT` 시간 범위 기본값**:
+
+```
+시간 범위가 명시되지 않은 rt_trade/rt_rent 쿼리는 기본 "최근 6개월" 로 제한.
+"최근/요즘/지금" 키워드면 "최근 3개월", "올해/이번" 이면 "최근 12개월",
+"3년간/장기 추이" 등 명시적 장기 질의만 36개월 전체 허용.
+네이버 nv_listing 기본 조건은 `is_active = TRUE` (현재 시점 호가).
+```
+
+**C. `synthesize` 프롬프트 — 크로스-소스 Recency 규칙**:
+
+```
+- 각 소스의 데이터 시점을 답변에 명확히 표시 (예: '(국토부 YYYY-MM) / (뉴스 YYYY-MM-DD 보도) / (PDF 업로드 시점 기준)')
+- 사용자가 '최근/지금/요즘' 을 강조하면 가장 최신 소스를 중심으로 답변.
+  DB 는 오늘 기준 직전 1~3개월, 뉴스는 60일 내, PDF 는 최신성 검증 불가 → 보조 근거로만
+- 소스 간 불일치 시 최신 시점을 우선하되 불일치 자체를 숨기지 말고
+  '시차로 갱신 안 된 가능성' 으로 언급
+```
+
+### 포기한 것 (RAG 메타데이터 타임스탬프)
+
+PDF 업로드 시점을 `metadata["uploaded_at"]` 에 저장하고 필터링하는 방식도 검토했으나:
+- 기존 업로드된 PDF 는 timestamp 부재 → 하이브리드 처리 복잡
+- 단일 PDF 안에 시점 다른 내용 혼재 가능
+- synthesize 프롬프트의 "보조 근거로만" 안내로 충분
+
+"최소 작업량 × 최대 효과" 원칙에 따라 1+3 구성 (query_generator 규칙 + synthesize 안내) 으로 마무리.
+
+---
+
 ## 남은 이슈
 
 1. **전세가율 > 100% 이상치** — 갭투자 질의에서 "474% / 178%" 비정상 비율이 표에 노출. SQL 결과 필터링 또는 프롬프트 단에서 100% cap 검증 필요.
 2. **check_query 재시도** — SYNTHESIS 롤백으로 절대 시간은 줄었지만, generate_query→check_query 한 사이클이 여전히 2회 도는 케이스 관찰. check_query 프롬프트의 false-reject 경향 점검 필요.
 3. **Dokploy 자동 배포** — 현재 Webhook URL 이 HTTP·IP·비표준포트 3가지 이유로 불안정. 안정화 시점에 Traefik 경유 HTTPS + 도메인 엔드포인트로 전환 검토.
+4. **RAG 시간 컨텍스트 부재** — PDF 업로드 시점 메타데이터 미저장. 현재는 synthesize 프롬프트로 "보조 근거" 격하만 함. 정확한 stale 감지는 향후 고려.
+5. **화성시 일부 LAWD_CD (`41593`)** — LAWD_SGG 매핑 없음 (1 단지). 필요 시 수동 보완.
 
 ---
 

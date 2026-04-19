@@ -16,7 +16,7 @@ from agents.config import get_llm
 from shared.config import NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
 
 _KST = timezone(timedelta(hours=9))
-_MAX_AGE_DAYS = 180  # 이보다 오래된 기사는 제외
+_MAX_AGE_DAYS = 60  # 이보다 오래된 기사는 제외 (부동산 뉴스는 1~2개월이면 이미 stale)
 
 # 기사 본문 추출용 CSS 선택자 (한국 언론사 공통 패턴)
 _BODY_SELECTORS = [
@@ -180,7 +180,7 @@ def _fetch_articles(query: str, cutoff) -> str:
         if _is_ad_like(title, desc, link):
             continue
 
-        # 2차 필터: 180일 이상 된 기사 제외
+        # 2차 필터: _MAX_AGE_DAYS 경과 기사 제외
         pub_dt = _parse_pubdate(pub_date_raw)
         if pub_dt and pub_dt.date() < cutoff:
             continue
@@ -206,7 +206,7 @@ def run_news(query: str) -> str:
     articles = _fetch_articles(query, cutoff)
 
     if not articles:
-        return "관련 최신 뉴스가 부족합니다 (광고·180일 경과 기사 제외)."
+        return f"관련 최신 뉴스가 부족합니다 (광고·{_MAX_AGE_DAYS}일 경과 기사 제외)."
 
     llm = get_llm()
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(today=today.strftime("%Y-%m-%d"))
