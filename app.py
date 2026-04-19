@@ -139,6 +139,9 @@ async def on_message(message: cl.Message) -> None:
         stream_mode="updates",
     ):
         for node_name, update in event.items():
+            # 노드가 빈 dict 를 반환하면 LangGraph 가 None 으로 emit 하는 경우가 있음
+            if update is None:
+                update = {}
 
             # ── query_generator: 생성된 질의를 Step으로 표시 ──
             if node_name == "query_generator":

@@ -10,8 +10,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
-from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.config import get_llm
 from shared.config import NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
@@ -151,55 +150,68 @@ def _parse_pubdate(pub_date: str) -> datetime | None:
         return None
 
 
-def create_news_agent():
-    """News 에이전트를 생성한다."""
-    llm = get_llm()
+def _extract_text(content) -> str:
+    """Gemini가 content를 리스트로 반환할 때 텍스트를 추출한다."""
+    if isinstance(content, list):
+        return "".join(
+            p.get("text", "") if isinstance(p, dict) else str(p)
+            for p in content
+        )
+    return content if isinstance(content, str) else str(content)
+
+
+def _fetch_articles(query: str, cutoff) -> str:
+    """네이버 뉴스 검색 + 필터링 + 본문 스크래핑 → 포매팅 문자열."""
+    items = _search_naver_news(query, display=30)
+    if not items:
+        return ""
+
+    results = []
+    for item in items:
+        if len(results) >= 10:
+            break
+
+        title = _clean_html(item.get("title", ""))
+        desc = _clean_html(item.get("description", ""))
+        link = item.get("link", "")
+        pub_date_raw = item.get("pubDate", "")
+
+        # 1차 필터: 메타데이터 기반 광고성 기사 제외
+        if _is_ad_like(title, desc, link):
+            continue
+
+        # 2차 필터: 180일 이상 된 기사 제외
+        pub_dt = _parse_pubdate(pub_date_raw)
+        if pub_dt and pub_dt.date() < cutoff:
+            continue
+        pub_date_fmt = pub_dt.strftime("%Y-%m-%d") if pub_dt else pub_date_raw
+
+        body, source = _scrape_article(link)
+
+        results.append(
+            f"제목: {title}\n"
+            f"언론사: {source}\n"
+            f"날짜: {pub_date_fmt}\n"
+            f"URL: {link}\n"
+            f"내용: {body or desc}\n"
+        )
+
+    return "\n---\n".join(results)
+
+
+def run_news(query: str) -> str:
+    """질의 → 네이버 뉴스 검색 → LLM 1회 호출로 요약."""
     today = datetime.now(_KST).date()
     cutoff = today - timedelta(days=_MAX_AGE_DAYS)
+    articles = _fetch_articles(query, cutoff)
 
-    @tool
-    def search_news(query: str) -> str:
-        """네이버 뉴스 검색 API로 최신 부동산 뉴스를 검색합니다.
-        query: 검색어 (예: '아파트 시장 전망', '강남 아파트 가격')
-        """
-        # 광고·오래된 기사 제외 후 10개 남기기 위해 여유 있게 30개 요청
-        items = _search_naver_news(query, display=30)
-        if not items:
-            return "뉴스 검색 결과가 없습니다."
+    if not articles:
+        return "관련 최신 뉴스가 부족합니다 (광고·180일 경과 기사 제외)."
 
-        results = []
-        for item in items:
-            if len(results) >= 10:
-                break
-
-            title = _clean_html(item.get("title", ""))
-            desc = _clean_html(item.get("description", ""))
-            link = item.get("link", "")
-            pub_date_raw = item.get("pubDate", "")
-
-            # 1차 필터: 메타데이터 기반 광고성 기사 제외
-            if _is_ad_like(title, desc, link):
-                continue
-
-            # 2차 필터: 180일 이상 된 기사 제외
-            pub_dt = _parse_pubdate(pub_date_raw)
-            if pub_dt and pub_dt.date() < cutoff:
-                continue
-            pub_date_fmt = pub_dt.strftime("%Y-%m-%d") if pub_dt else pub_date_raw
-
-            body, source = _scrape_article(link)
-
-            results.append(
-                f"제목: {title}\n"
-                f"언론사: {source}\n"
-                f"날짜: {pub_date_fmt}\n"
-                f"URL: {link}\n"
-                f"내용: {body or desc}\n"
-            )
-
-        if not results:
-            return "뉴스 검색 결과가 없습니다 (광고·오래된 기사 제외 후)."
-        return "\n---\n".join(results)
-
+    llm = get_llm()
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(today=today.strftime("%Y-%m-%d"))
-    return create_agent(llm, [search_news], system_prompt=system_prompt)
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"[사용자 질의]\n{query}\n\n[검색된 뉴스 기사]\n{articles}"),
+    ])
+    return _extract_text(response.content)

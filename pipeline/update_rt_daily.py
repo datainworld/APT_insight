@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from pipeline.collect_rt import LAWD_CODES, _collect_paginated
+from pipeline.lawd import LAWD_SGG
 from pipeline.schemas import (
     convert_to_rent_schema,
     convert_to_trade_schema,
@@ -91,8 +92,11 @@ def _geocode_new_complex_rows(df_new: pd.DataFrame) -> pd.DataFrame:
             umd = str(row.get("umdNm", "") or "")
             jibun = str(row.get("jibun", "") or "")
 
+            apt_id = str(row["aptSeq"])
+            sido_name, sgg_name = LAWD_SGG.get(apt_id[:5], (None, None))
+
             records.append({
-                "apt_id": str(row["aptSeq"]),
+                "apt_id": apt_id,
                 "apt_name": str(row.get("aptNm", "") or ""),
                 "build_year": build_year,
                 "road_address": build_address(row),
@@ -100,6 +104,8 @@ def _geocode_new_complex_rows(df_new: pd.DataFrame) -> pd.DataFrame:
                 "latitude": lat,
                 "longitude": lon,
                 "admin_dong": admin,
+                "sido_name": sido_name,
+                "sgg_name": sgg_name,
             })
     return pd.DataFrame(records)
 
@@ -132,13 +138,14 @@ def upsert_new_complexes(raw_trades: list[dict], raw_rents: list[dict], engine: 
         df_out.to_sql("rt_complex_staging", conn, if_exists="replace", index=False)
         conn.execute(text("""
             INSERT INTO rt_complex (apt_id, apt_name, build_year, road_address,
-                                    jibun_address, latitude, longitude, admin_dong)
+                                    jibun_address, latitude, longitude, admin_dong,
+                                    sido_name, sgg_name)
             SELECT apt_id, apt_name,
                    CAST(build_year AS INTEGER),
                    road_address, jibun_address,
                    CAST(latitude AS DOUBLE PRECISION),
                    CAST(longitude AS DOUBLE PRECISION),
-                   admin_dong
+                   admin_dong, sido_name, sgg_name
             FROM rt_complex_staging
             ON CONFLICT (apt_id) DO NOTHING;
         """))
