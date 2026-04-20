@@ -31,6 +31,25 @@ class Filter:
     period_months: int = 36
 
 
+def build_filter(
+    sido: str | None,
+    sgg: str | None,
+    dong: str | None,
+    area: str | None,
+    deal: str | None,
+    period: int | float | str | None,
+) -> "Filter":
+    """Dash State 값(None/빈 문자열/문자열 숫자)을 안전하게 Filter 로 변환."""
+    return Filter(
+        sido=sido or "서울특별시",
+        sgg=sgg or "전체",
+        dong=dong or "전체",
+        area=area or "전체",
+        deal=deal or "sale",
+        period_months=int(period or 36),
+    )
+
+
 AREA_RANGES: dict[str, tuple[float | None, float | None]] = {
     "전체": (None, None),
     "~60㎡": (None, 60.0),

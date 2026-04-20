@@ -68,11 +68,11 @@ def _pick_bucket(value: float, vmin: float, vmax: float, n_buckets: int) -> int:
     return max(0, min(n_buckets - 1, idx))
 
 
-def _prepare_geojson(
+def prepare_choropleth_data(
     values_by_sgg: dict[str, float],
     color_scale: ColorScale,
-    selected_sgg: str | None,
-    sido: str | None,
+    selected_sgg: str | None = None,
+    sido: str | None = None,
 ) -> dict:
     """GeoJSON features 의 properties 에 fillColor + selected 를 주입한 복사본 반환."""
     raw = load_metro_geojson()
@@ -136,7 +136,7 @@ def ChoroplethMap(
     id_prefix 기준으로 내부 ID 부여 (e.g. `f"{id_prefix}-geojson"`).
     클릭 이벤트는 `f"{id_prefix}-geojson"` 의 clickData State 에 feature dict 로 담긴다.
     """
-    gj = _prepare_geojson(values_by_sgg, color_scale, selected_sgg, sido)
+    gj = prepare_choropleth_data(values_by_sgg, color_scale, selected_sgg, sido)
     center_lat, center_lon, zoom = _SIDO_VIEW.get(sido or "서울특별시", (37.5, 127.0, 9))
 
     children: list = [
