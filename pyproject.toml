@@ -20,6 +20,11 @@ dependencies = [
     # Web UI
     "chainlit",
     "plotly",
+    "dash",
+    "dash-leaflet",
+    "dash-ag-grid",
+    "dash-mantine-components",
+    "cachetools",
     # PDF
     "pymupdf",
     # Pipeline
@@ -37,3 +42,35 @@ dependencies = [
     "ipykernel>=7.2.0",
     "nbformat>=5.10.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "dash[testing]",
+    "selenium",
+    "testcontainers[postgres]",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+extend-select = ["I"]  # isort
+ignore = ["E501"]  # line length is soft
+
+[tool.mypy]
+python_version = "3.13"
+files = ["dash_app"]
+ignore_missing_imports = true
+check_untyped_defs = false
+follow_imports = "silent"
+exclude = ["agents/", "pipeline/"]

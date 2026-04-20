@@ -1,0 +1,315 @@
+/* =============================================================
+   DeepData / APT Insight — Colors & Type
+   Sourced from:
+     - APT_insight/.chainlit/config.toml      (Chainlit defaults)
+     - apt-insight-platform/webapp/static/style.css (custom theme)
+     - public/logo.svg, public/*.svg          (brand greys, icon accents)
+   Direction: dark-first data-analytics dashboard, cool cyan accent,
+   Pretendard Korean-friendly sans-serif, utility-minded.
+   ============================================================= */
+
+/* Pretendard — Korean-friendly system font stack */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+/* JetBrains Mono for SQL / code / numeric readouts */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ---------- CORE PALETTE (dark) ---------- */
+  --bg-0: #0f0f10;            /* app background, deeper than Chainlit default for contrast */
+  --bg-1: #121212;            /* chat-bg */
+  --bg-2: #1e1e1e;            /* sidebar / assistant bubble */
+  --bg-3: #242424;            /* card, input-wrapper */
+  --bg-4: #2a2a2c;            /* hover on card */
+  --bg-code: #1a1a1a;         /* pre / code block */
+
+  --fg-1: #e0e0e0;            /* primary text */
+  --fg-2: #a0a0a0;            /* secondary text */
+  --fg-3: #777777;            /* tertiary / hint text */
+  --fg-inverted: #ffffff;     /* text on accent / user bubble */
+
+  --border-1: #333333;        /* default border */
+  --border-2: #444444;        /* hover/focus border */
+  --border-subtle: #2a2a2a;
+
+  /* ---------- ACCENT (cyan-blue gradient) ---------- */
+  --accent-1: #4facfe;        /* primary accent, link, emphasis */
+  --accent-2: #00f2fe;        /* gradient end, hover */
+  --accent-grad: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --accent-shadow: 0 4px 12px rgba(79, 172, 254, 0.30);
+
+  /* ---------- MESSAGES ---------- */
+  --msg-user-bg: #2b5278;     /* user bubble (muted indigo-blue) */
+  --msg-user-fg: #ffffff;
+  --msg-ai-bg: var(--bg-2);
+  --msg-ai-fg: var(--fg-1);
+
+  /* ---------- CATEGORY ACCENTS (from icon SVGs) ---------- */
+  --cat-chart:   #4CAF50;     /* 차트 / 분석 */
+  --cat-compare: #2196F3;     /* 비교 / SQL */
+  --cat-listing: #9C27B0;     /* 매물 */
+  --cat-news:    #FF9800;     /* 뉴스 */
+
+  /* ---------- SEMANTIC / STATUS ---------- */
+  --pos: #4CAF50;             /* 상승, 매수 */
+  --neg: #ef5350;             /* 하락, 매도 */
+  --warn: #FF9800;
+  --info: #4facfe;
+
+  /* ---------- TYPE SYSTEM ---------- */
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+               Consolas, "Liberation Mono", monospace;
+
+  /* scale — modest, dashboard-density */
+  --text-xs:   0.75rem;   /* 12px — meta, uppercase labels */
+  --text-sm:   0.85rem;   /* 13.6px — chips, news card body */
+  --text-base: 1rem;      /* 16px — body / input */
+  --text-md:   1.1rem;    /* 17.6px */
+  --text-lg:   1.2rem;    /* 19.2px — sidebar brand */
+  --text-xl:   1.4rem;    /* 22.4px — chat header h1 */
+  --text-2xl:  1.75rem;   /* 28px — section headings */
+  --text-3xl:  2rem;      /* 32px — hero numeric */
+  --text-display: 2.75rem;/* 44px — reserved for slide-style splashes */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  --tracking-wide: 0.5px;
+
+  /* ---------- SPACING ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 10px;
+  --space-4: 12px;
+  --space-5: 15px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 30px;
+  --space-9: 40px;
+
+  /* ---------- RADII ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;          /* code block */
+  --radius-md: 8px;          /* card, button */
+  --radius-lg: 12px;         /* assistant bubble */
+  --radius-xl: 16px;         /* chip, input wrapper */
+  --radius-pill: 999px;
+
+  /* ---------- ELEVATION ---------- */
+  --shadow-xs:  0 2px 6px  rgba(0,0,0,0.02);   /* message content */
+  --shadow-sm:  0 2px 8px  rgba(0,0,0,0.05);   /* card */
+  --shadow-md:  0 4px 15px rgba(0,0,0,0.10);   /* input */
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.25);   /* modal / hovering card */
+
+  /* ---------- MOTION ---------- */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+}
+
+/* ---------- LIGHT THEME override ---------- */
+.light-theme, [data-theme="light"] {
+  --bg-0: #f5f7f9;
+  --bg-1: #f5f7f9;
+  --bg-2: #ffffff;
+  --bg-3: #ffffff;
+  --bg-4: #eef1f4;
+  --bg-code: #f0f0f0;
+
+  --fg-1: #333333;
+  --fg-2: #666666;
+  --fg-3: #999999;
+  --fg-inverted: #ffffff;
+
+  --border-1: #e0e0e0;
+  --border-2: #cfd4da;
+  --border-subtle: #eef0f2;
+
+  --accent-1: #007bff;
+  --accent-2: #0056b3;
+  --accent-grad: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+
+  --msg-user-bg: #007bff;
+  --msg-user-fg: #ffffff;
+  --msg-ai-bg: #ffffff;
+}
+
+/* =============================================================
+   SEMANTIC ELEMENT STYLES (apply to tag or .class alias)
+   ============================================================= */
+
+html, body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--fg-1);
+  background: var(--bg-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, .h1 {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
+}
+h2, .h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--fg-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+h3, .h3 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--fg-2);
+}
+p  { font-size: var(--text-base); line-height: var(--leading-relaxed); color: var(--fg-1); }
+.meta { font-size: var(--text-xs); color: var(--fg-2); }
+.label-upper {
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-weight: var(--weight-semibold);
+}
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+}
+pre {
+  background: var(--bg-code);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+strong { color: var(--accent-1); font-weight: var(--weight-semibold); }
+
+/* emphasised numeric readout — e.g. 거래가 표시 */
+.stat-num {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
+  color: var(--fg-1);
+  letter-spacing: -0.01em;
+}
+.stat-num .unit {
+  font-family: var(--font-sans);
+  font-size: 0.5em;
+  color: var(--fg-2);
+  margin-left: 4px;
+}
+.stat-up   { color: var(--pos); }
+.stat-down { color: var(--neg); }
+
+/* =============================================================
+   PLOTLY TOKENS — applied via window.Plotly.setPlotConfig + layout
+   Usage (JS):
+     const plotlyLayout = getComputedPlotlyLayout(document.documentElement);
+     Plotly.newPlot(el, data, plotlyLayout, { displayModeBar: false });
+   Colors are pulled from these custom props so dark/light themes
+   both produce correctly-tinted charts.
+   ============================================================= */
+:root {
+  /* Plotly categorical palette — primary / comparison / listing / news
+     then 3 extensions harmonised with accent cyan family. Keep in sync
+     with --cat-* semantics so chart legends match sidebar filters. */
+  --plotly-c1: #4facfe;  /* primary — trend, accent */
+  --plotly-c2: #00f2fe;  /* highlight / latest */
+  --plotly-c3: #4CAF50;  /* positive / 상승 */
+  --plotly-c4: #FF9800;  /* news / warning */
+  --plotly-c5: #9C27B0;  /* listing */
+  --plotly-c6: #2196F3;  /* compare */
+  --plotly-c7: #ef5350;  /* negative / 하락 */
+
+  /* Plotly heatmap — blue→cyan ramp matches Kakao map tile density */
+  --plotly-heat-0: #0b2a3d;
+  --plotly-heat-1: #123a55;
+  --plotly-heat-2: #1a4d72;
+  --plotly-heat-3: #2b5278;
+  --plotly-heat-4: #386da0;
+  --plotly-heat-5: #4facfe;
+  --plotly-heat-6: #00f2fe;
+
+  /* Plotly chrome */
+  --plotly-paper-bg: transparent;   /* let chat bubble show through */
+  --plotly-plot-bg:  transparent;
+  --plotly-grid:     #2a2a2c;       /* dark theme */
+  --plotly-axis:     #a0a0a0;
+  --plotly-axis-title: #e0e0e0;
+  --plotly-tick:     #777777;
+  --plotly-hover-bg: #242424;
+  --plotly-hover-border: #4facfe;
+}
+.light-theme, [data-theme="light"] {
+  --plotly-grid:     #eef0f2;
+  --plotly-axis:     #666666;
+  --plotly-axis-title: #333333;
+  --plotly-tick:     #999999;
+  --plotly-hover-bg: #ffffff;
+}
+
+/* =============================================================
+   KAKAO MAP TOKENS — for Kakao Maps JS SDK usage
+   Usage (JS):
+     const map = new kakao.maps.Map(el, { center: seoul, level: 7 });
+     applyKakaoMapStyle(map);               // see README
+     new kakao.maps.CustomOverlay({ content: PIN.up, position, yAnchor: 1 });
+   ============================================================= */
+:root {
+  /* map chrome */
+  --kakao-bg:          var(--bg-2);       /* behind tiles / loading */
+  --kakao-tile-filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); /* dark-ify default Kakao tiles */
+
+  /* boundary / polygon strokes for 행정동 / 자치구 */
+  --kakao-boundary-stroke: #4facfe;
+  --kakao-boundary-stroke-w: 1.5;
+  --kakao-boundary-fill:   rgba(79, 172, 254, 0.08);
+  --kakao-boundary-fill-hover: rgba(79, 172, 254, 0.22);
+  --kakao-boundary-selected:  rgba(0, 242, 254, 0.30);
+
+  /* heatmap fill (choropleth by price density) — use 7-step ramp above */
+
+  /* pin / marker — semantic by listing type */
+  --kakao-pin-up:     #FF9800;  /* 급등 */
+  --kakao-pin-down:   #ef5350;  /* 급락 */
+  --kakao-pin-hot:    #00f2fe;  /* 거래량 급증 */
+  --kakao-pin-listing:#9C27B0;  /* 매물 */
+  --kakao-pin-shadow: 0 4px 12px rgba(0,0,0,.45);
+
+  /* cluster bubbles */
+  --kakao-cluster-sm: #2b5278;
+  --kakao-cluster-md: #386da0;
+  --kakao-cluster-lg: #4facfe;
+  --kakao-cluster-xl: #00f2fe;
+
+  /* info-window / custom overlay */
+  --kakao-overlay-bg:     var(--bg-3);
+  --kakao-overlay-border: var(--border-1);
+  --kakao-overlay-radius: var(--radius-md);
+  --kakao-overlay-shadow: var(--shadow-md);
+  --kakao-overlay-pad:    var(--space-5);
+}
+.light-theme, [data-theme="light"] {
+  --kakao-tile-filter: none;   /* default Kakao tiles are already light */
+  --kakao-boundary-stroke: #007bff;
+  --kakao-boundary-fill:   rgba(0, 123, 255, 0.08);
+  --kakao-boundary-fill-hover: rgba(0, 123, 255, 0.20);
+}
