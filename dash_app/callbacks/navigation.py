@@ -1,15 +1,19 @@
-"""전역 네비게이션 콜백 — 현재 URL에 해당하는 nav 링크를 active로 표시."""
+"""전역 네비게이션 콜백 — 현재 URL 에 해당하는 nav 링크를 active 로 표시."""
 
 from __future__ import annotations
 
-from dash import ALL, Input, Output, State, callback
+from dash import Input, Output, callback
+
+from dash_app.components.sidebar import nav_link_id
+from dash_app.config import PAGES
+
+_OUTPUTS = [Output(nav_link_id(p["path"]), "className") for p in PAGES]
 
 
 @callback(
-    Output({"role": "page-nav", "path": ALL}, "className"),
+    *_OUTPUTS,
     Input("_url", "pathname"),
-    State({"role": "page-nav", "path": ALL}, "id"),
 )
-def _highlight_active_nav(pathname: str | None, ids: list[dict]) -> list[str]:
+def _highlight_active_nav(pathname: str | None) -> tuple[str, ...]:
     current = pathname or "/"
-    return ["active" if i["path"] == current else "" for i in ids]
+    return tuple("active" if p["path"] == current else "" for p in PAGES)

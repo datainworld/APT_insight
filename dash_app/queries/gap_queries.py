@@ -51,7 +51,7 @@ def _gap_cte_sql(*, include_complex_cols: bool) -> str:
             SELECT complex_no,
                    AVG(current_price) AS avg_ask,
                    COUNT(*)            AS active_count,
-                   AVG(EXTRACT(EPOCH FROM (CURRENT_DATE - first_seen_date)) / 86400.0) AS avg_days_listed
+                   AVG((CURRENT_DATE - first_seen_date)::int) AS avg_days_listed
             FROM nv_listing
             WHERE is_active = TRUE AND trade_type = 'A1' AND current_price IS NOT NULL
             GROUP BY complex_no

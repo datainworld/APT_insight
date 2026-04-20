@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
-from dash import dcc, html
+from dash import html
 
 from dash_app.components.filter_panel import filter_panel
 from dash_app.config import PAGES
@@ -14,12 +15,21 @@ def _fa(icon: str) -> html.I:
     return html.I(className=f"fa-solid fa-{icon}")
 
 
-def _nav_link(path: str, name: str, icon: str) -> dcc.Link:
-    return dcc.Link(
+def nav_link_id(path: str) -> str:
+    """URL path → HTML-safe string id."""
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", path).strip("-") or "home"
+    return f"page-nav-{slug}"
+
+
+def _nav_link(path: str, name: str, icon: str) -> html.A:
+    # html.A 사용 이유: dcc.Link 는 use_pages + 동일 기반 href 다수일 때 click routing 이
+    # 인접 링크로 오라우팅되는 현상이 있었음. 브라우저 표준 a[href] 로 단순 GET 이동.
+    # 전체 페이지 재로드 비용은 DB 쿼리(100~500ms) 대비 미미.
+    return html.A(
         [_fa(icon), html.Span(name)],
         href=path,
-        id={"role": "page-nav", "path": path},
-        className="",  # set by callback to "active" on current path
+        id=nav_link_id(path),
+        className="",
     )
 
 
