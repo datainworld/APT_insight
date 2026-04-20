@@ -269,6 +269,39 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 }
 .page-nav a i { width: 16px; text-align: center; opacity: .8; }
 
+/* ---------- Empty state ---------- */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 20px; text-align: center; color: var(--fg-3);
+  border: 1px dashed var(--border-1); border-radius: 10px; background: var(--bg-2);
+}
+.empty-state-icon { font-size: 28px; opacity: .5; margin-bottom: 12px; }
+.empty-state-title { margin: 0; font-size: 16px; color: var(--fg-2); font-weight: 600; }
+.empty-state-desc { margin: 6px 0 0; font-size: var(--text-sm); color: var(--fg-3); max-width: 420px; }
+.empty-state-action { margin-top: 14px; }
+
+/* ---------- Status banner ---------- */
+.status-banner {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 8px; font-size: var(--text-sm);
+  border: 1px solid var(--border-1);
+}
+.status-banner--info    { background: rgba(79, 172, 254, .08); border-color: rgba(79, 172, 254, .24); }
+.status-banner--warning { background: rgba(239, 176, 80, .08); border-color: rgba(239, 176, 80, .24); }
+.status-banner--success { background: rgba(76, 175, 80, .08); border-color: rgba(76, 175, 80, .24); }
+.status-banner--error   { background: rgba(239, 83, 80, .08); border-color: rgba(239, 83, 80, .24); }
+.status-banner-item { display: flex; align-items: baseline; gap: 6px; color: var(--fg-2); }
+.status-banner-item .label { color: var(--fg-3); }
+.status-banner-item .value { color: var(--fg-1); font-family: var(--font-mono); font-size: 15px; }
+
+/* ---------- Choropleth (dash-leaflet) ---------- */
+.choropleth-wrap { border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+.choropleth-legend {
+  position: absolute; bottom: 10px; left: 10px; z-index: 500;
+  padding: 6px 10px; border-radius: 6px; background: rgba(18, 18, 18, .78);
+  color: var(--fg-2); font-size: 11px; backdrop-filter: blur(4px);
+}
+
 /* Skeleton page container (non-home pages) */
 .page-skeleton {
   padding: 48px 32px; max-width: 720px;

@@ -1,7 +1,7 @@
 """일일 파이프라인 오케스트레이터 (교재 19장).
 
-RT → NV 순차 실행, 각 단계 에러 격리, JSON 리포트 저장, exit code 0/1.
-한쪽 실패 시 `status: "partial"`.
+RT → NV → News → MV refresh 순차 실행, 각 단계 에러 격리, JSON 리포트 저장, exit code 0/1.
+모든 성공 시 success / 일부 실패 시 partial / 전원 실패 시 error.
 
 사용법:
     python -m pipeline.run_daily
@@ -15,10 +15,48 @@ import sys
 import time
 import traceback
 
+from sqlalchemy import text
+
+from pipeline.collect_news import collect as collect_news
 from pipeline.update_nv_daily import main as update_nv
 from pipeline.update_rt_daily import main as update_rt
 from pipeline.utils import now_kst
 from shared.config import BASE_DIR
+from shared.db import get_engine
+
+_MV_NAMES = ("mv_metrics_by_sgg", "mv_metrics_by_complex")
+
+
+def _refresh_mvs() -> dict:
+    """REFRESH MATERIALIZED VIEW for each MV. CONCURRENTLY 우선, 실패 시 일반 REFRESH.
+
+    첫 실행 시에는 데이터가 없어 CONCURRENTLY 가 실패할 수 있어 폴백을 둔다.
+    """
+    refreshed: list[str] = []
+    errors: list[str] = []
+    engine = get_engine()
+    for name in _MV_NAMES:
+        try:
+            with engine.connect() as conn:
+                # Autocommit for MV refresh (CONCURRENTLY requires no open txn)
+                conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+                    text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {name}")
+                )
+            refreshed.append(name)
+        except Exception:
+            try:
+                with engine.connect() as conn:
+                    conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+                        text(f"REFRESH MATERIALIZED VIEW {name}")
+                    )
+                refreshed.append(name)
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+    return {
+        "status": "success" if not errors else ("partial" if refreshed else "error"),
+        "refreshed": refreshed,
+        "error_count": len(errors),
+    }
 
 
 def main(nv_sample: int | None = None) -> None:
@@ -28,6 +66,8 @@ def main(nv_sample: int | None = None) -> None:
         "started_at": started_at.isoformat(timespec="seconds"),
         "rt": {"status": "pending"},
         "nv": {"status": "pending"},
+        "news": {"status": "pending"},
+        "mv_refresh": {"status": "pending"},
         "status": "pending",
     }
 
@@ -52,7 +92,21 @@ def main(nv_sample: int | None = None) -> None:
             traceback.print_exc()
             report["nv"] = {"status": "error", "message": str(e2)}
 
-    # --- 최종 상태 ---
+    # --- News ---
+    try:
+        report["news"] = collect_news()
+    except Exception as e:
+        traceback.print_exc()
+        report["news"] = {"status": "error", "message": str(e)}
+
+    # --- MV Refresh (RT/NV 후 최신 상태로 갱신) ---
+    try:
+        report["mv_refresh"] = _refresh_mvs()
+    except Exception as e:
+        traceback.print_exc()
+        report["mv_refresh"] = {"status": "error", "message": str(e)}
+
+    # --- 최종 상태 (핵심 단계: RT + NV 기준, 뉴스/MV 는 보조) ---
     rt_ok = report["rt"].get("status") == "success"
     nv_ok = report["nv"].get("status") == "success"
     if rt_ok and nv_ok:
@@ -85,8 +139,13 @@ def main(nv_sample: int | None = None) -> None:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="일일 파이프라인 오케스트레이터 (교재 19장)")
-    parser.add_argument("--nv-sample", type=int, default=None,
-                        help="네이버 단지 개수 제한 (Local 검증용)")
+    parser.add_argument(
+        "--nv-sample",
+        type=int,
+        default=None,
+        help="네이버 단지 개수 제한 (Local 검증용)",
+    )
     args = parser.parse_args()
     main(nv_sample=args.nv_sample)
