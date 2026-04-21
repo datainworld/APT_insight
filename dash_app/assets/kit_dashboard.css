@@ -248,27 +248,95 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 @keyframes chatpulse { 0% { box-shadow: 0 0 0 0 rgba(79,172,254,.5);} 70%{ box-shadow: 0 0 0 14px rgba(79,172,254,0);} 100%{ box-shadow: 0 0 0 0 rgba(79,172,254,0);} }
 
 .chat-panel {
-  position: fixed; z-index: 60;
+  position: fixed; z-index: 1000;
   display: flex; flex-direction: column;
-  background: rgba(26,26,28,.48);
+  background: rgba(26,26,28,.78);
   backdrop-filter: blur(28px) saturate(150%);
   -webkit-backdrop-filter: blur(28px) saturate(150%);
   border: 1px solid rgba(255,255,255,.1);
   border-radius: 18px;
   box-shadow: 0 20px 60px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.05) inset;
   overflow: hidden;
-  animation: chatin .28s var(--ease);
-  opacity: .96;
-  transition: opacity .2s var(--ease);
+  transition: all 200ms ease-out;
 }
-.chat-panel[data-size="compact"]  { right: 24px; bottom: 24px; width: 360px; height: 520px; }
-.chat-panel[data-size="expanded"] { right: 24px; bottom: 24px; width: 520px; height: 720px; }
-.chat-panel[data-size="max"]      { right: 0; top: 0; bottom: 0; width: 50%; height: 100vh; border-radius: 18px 0 0 18px; }
-.chat-panel:hover { opacity: 1; }
-.chat-panel.dim { opacity: .55; }
-.chat-panel.dim:hover { opacity: 1; }
-.chat-panel.hidden { display: none; }
-@keyframes chatin { from { opacity: 0; transform: translateY(12px) scale(.96);} to { opacity: 1; transform: none;} }
+
+/* 4단계 크기 (스펙 6.1) — 모두 bottom-right 기준 고정 */
+.chat-panel[data-size="minimized"] {
+  right: 24px; bottom: 24px;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  border: none;
+  box-shadow: 0 10px 28px rgba(79,172,254,.5), 0 0 0 1px rgba(255,255,255,.08) inset;
+}
+.chat-panel[data-size="compact"] {
+  right: 24px; bottom: 24px;
+  width: 400px;
+  height: min(640px, calc(100vh - 48px));
+}
+.chat-panel[data-size="expanded"] {
+  right: 12px; top: 12px; bottom: 12px;
+  width: clamp(480px, 50vw, 800px);
+  height: calc(100vh - 24px);
+}
+.chat-panel[data-size="maximized"] {
+  right: 12px; top: 12px;
+  width: calc(100vw - 24px);
+  height: calc(100vh - 24px);
+}
+
+/* minimized 에서 내부 UI 완전히 감추고 open 버튼만 노출 */
+.chat-panel[data-size="minimized"] > :not(.chat-open-btn):not([data-dash-is-loading]) {
+  display: none !important;
+}
+.chat-open-btn {
+  display: none;
+  border: none; background: transparent; color: #fff;
+  width: 100%; height: 100%; cursor: pointer;
+  align-items: center; justify-content: center; font-size: 22px;
+  position: relative;
+}
+.chat-panel[data-size="minimized"] .chat-open-btn { display: flex; }
+.chat-panel[data-size="minimized"]:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 14px 34px rgba(79,172,254,.6);
+}
+.chat-open-btn .pulse {
+  position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: 0 0 0 0 rgba(79,172,254,.55);
+  animation: chatpulse 2.2s infinite; pointer-events: none;
+}
+@keyframes chatpulse {
+  0%   { box-shadow: 0 0 0 0 rgba(79,172,254,.5); }
+  70%  { box-shadow: 0 0 0 14px rgba(79,172,254,0); }
+  100% { box-shadow: 0 0 0 0 rgba(79,172,254,0); }
+}
+
+/* 반응형 — 작은 화면에서 compact/expanded 둘 다 거의 전체 */
+@media (max-width: 768px) {
+  .chat-panel[data-size="compact"],
+  .chat-panel[data-size="expanded"] {
+    right: 12px; left: 12px; bottom: 12px; top: auto;
+    width: auto; height: calc(100vh - 96px);
+  }
+}
+
+/* 퀵 액션 바 (PDF 업로드 등 — Phase D.4 에서 활성화) */
+.chat-quick {
+  display: flex; gap: 6px; padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.chat-quick .quick-btn {
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  color: var(--fg-2); padding: 5px 10px; border-radius: 6px;
+  font-size: 11px; font-family: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.chat-quick .quick-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.08); color: var(--fg-1);
+}
+.chat-quick .quick-btn:disabled { opacity: .4; cursor: not-allowed; }
+
 
 .chat-hdr {
   display: flex; align-items: center; gap: 10px; padding: 12px 14px;
@@ -299,8 +367,35 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 .c-msg .bub {
   padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.55;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06); color: var(--fg-1);
-  max-width: 270px; word-wrap: break-word;
+  max-width: 100%; word-wrap: break-word;
 }
+/* 버블 스케일은 패널 상태별로 상한 설정 */
+.chat-panel[data-size="compact"]   .c-msg .bub { max-width: 300px; }
+.chat-panel[data-size="expanded"]  .c-msg .bub { max-width: 560px; }
+.chat-panel[data-size="maximized"] .c-msg .bub { max-width: 820px; }
+
+/* 인라인 markdown 요소 */
+.c-msg .bub em, .c-msg .bub i { color: var(--fg-2); font-style: italic; }
+.c-msg .bub code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 4px;
+  color: #9ddcff;
+}
+
+/* 블록 레벨 — heading/list (버블과 동일 컬럼에 스택) */
+.c-md-h {
+  margin: 8px 0 4px; font-size: 14px; font-weight: 700; color: var(--accent-1);
+  line-height: 1.35;
+}
+.c-md-h:first-child { margin-top: 0; }
+.chat-panel[data-size="expanded"]  .c-md-h,
+.chat-panel[data-size="maximized"] .c-md-h { font-size: 15px; }
+.c-md-ul {
+  margin: 4px 0 4px 4px; padding-left: 16px; font-size: 13px;
+  color: var(--fg-1); line-height: 1.6;
+}
+.c-md-ul li { margin-bottom: 2px; }
+.c-md-ul li::marker { color: var(--fg-3); }
 .c-msg.sys .bub { border-top-left-radius: 4px; }
 .c-msg.user .bub { background: linear-gradient(135deg, rgba(79,172,254,.85), rgba(0,242,254,.7)); color: #05141f; border: none; border-top-right-radius: 4px; font-weight: 500; }
 .c-msg .bub strong { color: #4facfe; font-weight: 600; }
@@ -315,7 +410,38 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 .c-chip:hover { background: rgba(79,172,254,.18); border-color: #4facfe; }
 
 .c-chart { margin-top: 8px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 6px; }
-.chat-panel[data-size="max"] .c-msg .bub { max-width: 560px; }
+
+/* 채팅 버블 내 테이블 (SQL rows) — 컴팩트, 가로 스크롤 */
+.c-table {
+  margin-top: 8px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.06);
+  border-radius: 10px; padding: 6px;
+}
+.c-table-wrap { overflow-x: auto; max-width: 100%; }
+.c-table .c-tab {
+  border-collapse: collapse; width: 100%;
+  font-family: var(--font-mono); font-size: 11px;
+}
+.c-table .c-tab th, .c-table .c-tab td {
+  padding: 4px 8px; text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.c-table .c-tab th {
+  color: var(--accent-1); font-weight: 600; background: rgba(79,172,254,.06);
+  position: sticky; top: 0;
+}
+.c-table .c-tab td { color: var(--fg-1); }
+.c-table .c-tab tr:last-child td { border-bottom: none; }
+.c-table .c-tab tr:hover td { background: rgba(255,255,255,.04); }
+.c-table-foot {
+  padding: 4px 8px 0; font-size: 10px; color: var(--fg-3);
+  font-family: var(--font-mono); text-align: right;
+}
+
+/* maximized 상태에서는 table 을 더 크게 */
+.chat-panel[data-size="maximized"] .c-table .c-tab { font-size: 12px; }
+.chat-panel[data-size="maximized"] .c-table .c-tab th,
+.chat-panel[data-size="maximized"] .c-table .c-tab td { padding: 6px 10px; }
 
 .c-type { display:flex; gap: 4px; align-items:center; padding: 4px 0; }
 .c-type span { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-2); animation: ctype 1.4s infinite ease-in-out both; }
@@ -346,6 +472,12 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
   display:flex; align-items:center; justify-content:center; font-size: 12px; flex-shrink: 0;
 }
 .chat-input .btn-s:disabled { background: rgba(255,255,255,.1); color: var(--fg-3); cursor: not-allowed; }
+/* 중단 버튼 — 질의 실행 중에만 노출 */
+.chat-input .btn-cancel {
+  background: linear-gradient(135deg, #ef5350, #d9584a) !important;
+  color: #fff !important;
+}
+.chat-input .btn-cancel:hover { filter: brightness(1.1); }
 
 /* Dash internal — hide undo/redo toolbar at bottom-left */
 ._dash-undo-redo { display: none; }

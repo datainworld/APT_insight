@@ -33,3 +33,6 @@ test.ipynb
 # OS
 .DS_Store
 Thumbs.db
+
+# Dash background callback cache
+.cache/

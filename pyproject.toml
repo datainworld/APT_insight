@@ -25,6 +25,7 @@ dependencies = [
     "dash-ag-grid",
     "dash-mantine-components",
     "cachetools",
+    "diskcache",
     # PDF
     "pymupdf",
     # Pipeline

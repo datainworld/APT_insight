@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 
 import dash
-from dash import Dash, dcc, html
+import diskcache
+from dash import Dash, DiskcacheManager, dcc, html
 
 # Global callbacks (register via side effect)
 from dash_app.callbacks import filters as _filters  # noqa: F401
@@ -39,6 +40,10 @@ def create_app() -> Dash:
     except Exception:
         last_refresh = None
 
+    # Background callbacks (채팅 invoke 의 장시간 실행 + 중단 기능용)
+    _cache = diskcache.Cache("./.cache/dash_bg")
+    background_manager = DiskcacheManager(_cache)
+
     app = Dash(
         __name__,
         use_pages=True,
@@ -46,6 +51,7 @@ def create_app() -> Dash:
         external_stylesheets=[FONT_AWESOME],
         suppress_callback_exceptions=True,
         prevent_initial_callbacks="initial_duplicate",  # type: ignore[arg-type]
+        background_callback_manager=background_manager,
         title="APT Insight — 대시보드",
     )
 

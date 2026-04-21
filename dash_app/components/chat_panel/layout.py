@@ -1,7 +1,15 @@
-"""플로팅 채팅 패널 레이아웃 — 기존 chat_components() 이동.
+"""플로팅 채팅 패널 레이아웃 — 4단계 크기 전환 지원 (스펙 6장).
 
-**주의**: 본 파일은 Phase D 에서 4단계 크기 전환 패널로 전면 재작성된다.
-Phase A/B 시점에는 기존 UI 그대로 유지하여 홈 페이지 회귀를 막는 역할만 한다.
+크기 상태는 `chat-size-mode` store 값에 따라 `data-size` 속성으로 CSS 에 반영된다.
+- minimized: 56×56 아이콘 (FAB 역할 흡수) — 클릭 시 → compact
+- compact: 400×min(640, 100vh-48) 기본 열린 상태
+- expanded: clamp(480, 50vw, 800)×(100vh-24) 우측 도크
+- maximized: 거의 전체 화면 오버레이
+
+헤더 컨트롤 3개:
+- [−] 최소화 (minimized)
+- [⇲/⇱] 한 단계 크게/작게 (현재 모드에 따라 아이콘 변함 — CSS/JS 처리)
+- [X] 닫기 = 최소화
 """
 
 from __future__ import annotations
@@ -16,20 +24,27 @@ def _fa(icon: str) -> html.I:
 
 
 def chat_components() -> list:
-    """FAB + panel. Rendered at the app shell root so position:fixed works."""
+    """루트 레이아웃에 mount 되는 채팅 패널 전체.
+
+    Section 하나로 4단계를 모두 표현하며 `data-size` 로 상태를 드러낸다.
+    minimized 상태에서는 내부 UI 가 감춰지고 아이콘만 클릭 타깃으로 노출된다.
+    """
     return [
-        html.Button(
-            [html.Span(className="pulse"), _fa("comment-dots")],
-            id="chat-fab",
-            className="chat-fab",
-            n_clicks=0,
-            title="AI 어시스턴트",
-        ),
         html.Section(
             id="chat-panel",
-            className="chat-panel hidden",
-            **{"data-size": "compact"},  # type: ignore[arg-type]
+            className="chat-panel",
+            **{"data-size": "minimized"},  # type: ignore[arg-type]
             children=[
+                # minimized 상태에서 전체 섹션을 클릭 타겟으로 만드는 오버레이.
+                # compact+ 상태에서는 `pointer-events: none` 으로 비활성.
+                html.Button(
+                    [html.Span(className="pulse"), _fa("comment-dots")],
+                    id="chat-open",
+                    className="chat-open-btn",
+                    n_clicks=0,
+                    title="AI 어시스턴트 열기",
+                ),
+                # 헤더 (compact+ 에서 표시)
                 html.Header(
                     className="chat-hdr",
                     children=[
@@ -37,48 +52,75 @@ def chat_components() -> list:
                         html.Div(
                             className="title",
                             children=[
-                                "AI 어시스턴트",
+                                "APT Insight 도우미",
                                 html.Em(
-                                    id="chat-scope",
                                     children=[
                                         html.Span(className="dot-live"),
-                                        "실시간 · 서울특별시",
+                                        "실시간 · DB 전체",
                                     ],
                                 ),
                             ],
                         ),
+                        # 4단계 직접 선택 — 각 버튼이 해당 크기로 즉시 이동
                         html.Button(
-                            _fa("regular fa-square"),
-                            id={"role": "chat-size", "value": "compact"},
-                            className="on",
+                            _fa("window-minimize"),
+                            id={"role": "chat-size", "mode": "minimized"},
+                            className="hdr-btn",
+                            title="최소화",
+                            n_clicks=0,
+                        ),
+                        html.Button(
+                            _fa("window-restore"),
+                            id={"role": "chat-size", "mode": "compact"},
+                            className="hdr-btn",
                             title="컴팩트",
                             n_clicks=0,
                         ),
                         html.Button(
-                            _fa("table-columns"),
-                            id={"role": "chat-size", "value": "expanded"},
-                            title="확장",
+                            _fa("window-maximize"),
+                            id={"role": "chat-size", "mode": "expanded"},
+                            className="hdr-btn",
+                            title="확장 (우측 도크)",
                             n_clicks=0,
                         ),
                         html.Button(
-                            _fa("up-right-and-down-left-from-center"),
-                            id={"role": "chat-size", "value": "max"},
+                            _fa("expand"),
+                            id={"role": "chat-size", "mode": "maximized"},
+                            className="hdr-btn",
                             title="최대화",
-                            n_clicks=0,
-                        ),
-                        html.Button(
-                            _fa("xmark"),
-                            id="chat-close",
-                            title="닫기",
                             n_clicks=0,
                         ),
                     ],
                 ),
+                # 퀵 액션 바 (PDF 업로드 UI 는 Phase D.4 에서 연결)
+                html.Div(
+                    className="chat-quick",
+                    children=[
+                        html.Button(
+                            [_fa("paperclip"), " PDF 업로드"],
+                            id="chat-btn-upload",
+                            className="quick-btn",
+                            n_clicks=0,
+                            title="PDF 업로드 (Phase D.4)",
+                            disabled=True,
+                        ),
+                        html.Button(
+                            [_fa("folder-open"), html.Span(id="chat-upload-count", children=" 목록 (0)")],
+                            id="chat-btn-uploads",
+                            className="quick-btn",
+                            n_clicks=0,
+                            title="업로드 목록 (Phase D.4)",
+                            disabled=True,
+                        ),
+                    ],
+                ),
+                # 메시지 스크롤 영역
                 html.Div(
                     id="chat-scroll",
                     className="chat-scroll",
                     children=[welcome_msg()],
                 ),
+                # 입력 (+ 중단 버튼 — busy 상태일 때만 표시)
                 html.Div(
                     className="chat-input",
                     children=[
@@ -87,8 +129,16 @@ def chat_components() -> list:
                             children=[
                                 dcc.Textarea(
                                     id="chat-input",
-                                    placeholder="조건에 맞는 분석을 물어보세요…",
+                                    placeholder="자연어로 질문하세요",
                                     rows=1,
+                                ),
+                                html.Button(
+                                    _fa("stop"),
+                                    id="chat-cancel",
+                                    className="btn-s btn-cancel",
+                                    n_clicks=0,
+                                    title="질의 중단",
+                                    style={"display": "none"},
                                 ),
                                 html.Button(
                                     _fa("paper-plane"),
@@ -100,9 +150,12 @@ def chat_components() -> list:
                         ),
                     ],
                 ),
+                # 기존 메시지 기능 stores (Phase D.3 에서 chat-history 로 마이그레이션)
                 dcc.Store(id="chat-msgs", data=[{"role": "sys", "kind": "welcome"}]),
                 dcc.Store(id="chat-thread", storage_type="session"),
                 dcc.Store(id="chat-busy", data=False),
+                # ESC 키 이벤트 카운터 — clientside 에서 증가시키면 size-transition 콜백이 감지
+                dcc.Store(id="chat-esc-trigger", data=0),
             ],
         ),
     ]
@@ -118,9 +171,10 @@ def welcome_msg() -> html.Div:
                     html.Div(
                         className="bub",
                         children=[
-                            "안녕하세요! 이 창은 ",
-                            html.Strong("플로팅 패널"),
-                            "입니다. 상단 버튼으로 컴팩트 / 확장 / 최대화를 전환하세요.",
+                            "안녕하세요! ",
+                            html.Strong("APT Insight 도우미"),
+                            " 입니다. 수도권 아파트 거래 · 호가 · 전세 지표를 질문하시거나, "
+                            "아래 칩을 눌러 예시 질의를 사용해 보세요.",
                         ],
                     ),
                     html.Div(

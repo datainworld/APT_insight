@@ -26,7 +26,11 @@ AREA_OPTIONS = [
 DEAL_OPTIONS: list[tuple[str, str]] = [("sale", "매매"), ("lease", "전세"), ("rent", "월세")]
 DEAL_LABELS: dict[str, str] = {k: v for k, v in DEAL_OPTIONS}
 
-CHIP_PROMPTS = ["수도권 열지도", "자치구 비교", "급등 실거래"]
+CHIP_PROMPTS = [
+    "강남구 최근 거래 추이",
+    "호가 괴리가 큰 단지",
+    "갭투자 유망 단지 추천",
+]
 
 DEFAULT_SIDO = "서울특별시"
 DEFAULT_PERIOD_MONTHS = 36
