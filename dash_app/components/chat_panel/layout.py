@@ -92,25 +92,60 @@ def chat_components() -> list:
                         ),
                     ],
                 ),
-                # 퀵 액션 바 (PDF 업로드 UI 는 Phase D.4 에서 연결)
+                # 퀵 액션 바 — PDF 업로드 + 업로드 목록 토글
                 html.Div(
                     className="chat-quick",
                     children=[
-                        html.Button(
-                            [_fa("paperclip"), " PDF 업로드"],
-                            id="chat-btn-upload",
-                            className="quick-btn",
-                            n_clicks=0,
-                            title="PDF 업로드 (Phase D.4)",
-                            disabled=True,
+                        dcc.Upload(
+                            id="chat-upload",
+                            children=html.Span(
+                                [_fa("paperclip"), " PDF 업로드"],
+                                className="upload-inner",
+                            ),
+                            className="quick-btn upload-btn",
+                            multiple=False,
+                            accept=".pdf",
+                            max_size=50 * 1024 * 1024,
                         ),
                         html.Button(
-                            [_fa("folder-open"), html.Span(id="chat-upload-count", children=" 목록 (0)")],
+                            [
+                                _fa("folder-open"),
+                                html.Span(id="chat-upload-count", children=" 목록 (0)"),
+                            ],
                             id="chat-btn-uploads",
                             className="quick-btn",
                             n_clicks=0,
-                            title="업로드 목록 (Phase D.4)",
-                            disabled=True,
+                            title="업로드한 PDF 목록",
+                        ),
+                    ],
+                ),
+                # 업로드 상태 라인 (진행/완료 텍스트 1줄)
+                html.Div(
+                    id="chat-upload-status",
+                    className="chat-upload-status",
+                    children="",
+                ),
+                # 업로드 목록 drawer (열림/닫힘은 className 토글)
+                html.Div(
+                    id="chat-uploads-drawer",
+                    className="uploads-drawer hidden",
+                    children=[
+                        html.Div(
+                            className="drawer-head",
+                            children=[
+                                html.B("업로드한 PDF"),
+                                html.Button(
+                                    _fa("xmark"),
+                                    id="chat-drawer-close",
+                                    className="hdr-btn",
+                                    n_clicks=0,
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            id="chat-uploads-list",
+                            className="drawer-body",
+                            children=[],
                         ),
                     ],
                 ),

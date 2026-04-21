@@ -13,6 +13,7 @@ from dash_app.callbacks import filters as _filters  # noqa: F401
 from dash_app.callbacks import navigation as _nav  # noqa: F401
 from dash_app.callbacks import theme as _theme  # noqa: F401
 from dash_app.components.chat_panel import callbacks as _chat_cb  # noqa: F401
+from dash_app.components.chat_panel import upload_callbacks as _chat_upload  # noqa: F401
 from dash_app.components.chat_panel.layout import chat_components
 from dash_app.components.sidebar import sidebar
 from dash_app.queries.rt_queries import last_refresh_timestamp
