@@ -11,13 +11,11 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
 
-from dash_app.components.choropleth_map import (
-    ChoroplethMap,
-    prepare_choropleth_data,
-)
+from dash_app.components.choropleth_map import ChoroplethMap, build_hideout
 from dash_app.components.formatters import format_percent, format_won
 from dash_app.components.kpi_card import KpiCard
 from dash_app.components.ranking_table import RankingTable
+from dash_app.geo_names import collapse_db_sgg_to_geo
 from dash_app.queries import invest_queries as iq
 from dash_app.theme import ACCENT_2, apply_dark_theme
 
@@ -173,7 +171,7 @@ def _build_gap_hist(df: pd.DataFrame) -> go.Figure:
     Output("kpi-invest-gap-v", "children"),
     Output("kpi-invest-conv-v", "children"),
     Output("kpi-invest-cutoff-v", "children"),
-    Output(f"{_MAP_ID}-geojson", "data"),
+    Output(f"{_MAP_ID}-geojson", "hideout"),
     Output("page-invest-gap-hist", "figure"),
     Output("page-invest-rank-grid", "rowData"),
     Input("f-sido", "value"),
@@ -211,12 +209,13 @@ def _refresh_invest(sido, sgg):
         conv_v = format_percent(sgg_df["conversion_rate"].mean())
 
     # ---- map (전세가율 choropleth) ----
-    values_by_sgg = (
+    db_values = (
         dict(zip(sgg_df["sgg"], (sgg_df["jeonse_ratio"].fillna(0) * 100)))
         if not sgg_df.empty
         else {}
     )
-    map_data = prepare_choropleth_data(
+    values_by_sgg = collapse_db_sgg_to_geo(db_values, aggregator="mean")
+    map_hideout = build_hideout(
         values_by_sgg,
         color_scale="Greens",
         selected_sgg=sgg if sgg and sgg != "전체" else None,
@@ -247,7 +246,7 @@ def _refresh_invest(sido, sgg):
     return (
         scope_label,
         jeonse_v, gap_v, conv_v, cutoff_v,
-        map_data,
+        map_hideout,
         hist_fig,
         row_data,
     )

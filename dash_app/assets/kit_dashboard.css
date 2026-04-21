@@ -296,10 +296,40 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 
 /* ---------- Choropleth (dash-leaflet) ---------- */
 .choropleth-wrap { border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+
+/* OSM 타일을 다크 톤으로 — tile pane 에만 filter 적용 (GeoJSON 오버레이는 영향 없음) */
+.choropleth-wrap .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) saturate(0.3);
+}
+/* invert 필터로 뒤집힌 attribution 링크 가독성 복원 */
+.choropleth-wrap .leaflet-control-attribution {
+  background: rgba(18, 18, 18, .78) !important;
+  color: var(--fg-3) !important;
+}
+.choropleth-wrap .leaflet-control-attribution a {
+  color: var(--fg-2) !important;
+}
+
 .choropleth-legend {
   position: absolute; bottom: 10px; left: 10px; z-index: 500;
   padding: 6px 10px; border-radius: 6px; background: rgba(18, 18, 18, .78);
   color: var(--fg-2); font-size: 11px; backdrop-filter: blur(4px);
+}
+
+/* Leaflet 기본 툴팁 → 다크 테마에 맞는 스타일로 덮어쓰기 */
+.leaflet-tooltip.choropleth-tooltip {
+  background: rgba(18, 18, 18, .92);
+  color: var(--fg-1);
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
+}
+.leaflet-tooltip.choropleth-tooltip::before {
+  border-top-color: var(--border-1);
 }
 
 /* Skeleton page container (non-home pages) */

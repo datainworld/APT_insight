@@ -11,12 +11,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
 
-from dash_app.components.choropleth_map import (
-    ChoroplethMap,
-    prepare_choropleth_data,
-)
+from dash_app.components.choropleth_map import ChoroplethMap, build_hideout
 from dash_app.components.formatters import format_count, format_percent
 from dash_app.components.kpi_card import KpiCard
+from dash_app.geo_names import collapse_db_sgg_to_geo
 from dash_app.queries import gap_queries as gapq
 from dash_app.queries import mapping_queries as mapq
 from dash_app.theme import apply_dark_theme
@@ -208,7 +206,7 @@ def _build_scatter(df: pd.DataFrame) -> go.Figure:
     Output("kpi-gap-avg-v", "children"),
     Output("kpi-gap-suspect-v", "children"),
     Output("kpi-gap-days-v", "children"),
-    Output(f"{_MAP_ID}-geojson", "data"),
+    Output(f"{_MAP_ID}-geojson", "hideout"),
     Output("page-gap-top", "figure"),
     Output("page-gap-scatter", "figure"),
     Input("f-sido", "value"),
@@ -249,12 +247,13 @@ def _refresh_gap(sido, sgg):
             days_v = format_count(int(sgg_df["avg_days_listed"].mean() or 0))
 
     # ---- map ----
-    values_by_sgg = (
+    db_values = (
         dict(zip(sgg_df["sgg"], (sgg_df["avg_gap_ratio"].fillna(0) * 100).clip(lower=0)))
         if not sgg_df.empty
         else {}
     )
-    map_data = prepare_choropleth_data(
+    values_by_sgg = collapse_db_sgg_to_geo(db_values, aggregator="mean")
+    map_hideout = build_hideout(
         values_by_sgg,
         color_scale="Reds",
         selected_sgg=sgg if sgg and sgg != "전체" else None,
@@ -280,4 +279,4 @@ def _refresh_gap(sido, sgg):
     top_fig = _build_top_bar(cplx_df)
     scatter_fig = _build_scatter(cplx_df)
 
-    return cover_txt, avg_v, suspect_v, days_v, map_data, top_fig, scatter_fig
+    return cover_txt, avg_v, suspect_v, days_v, map_hideout, top_fig, scatter_fig

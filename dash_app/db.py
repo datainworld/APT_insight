@@ -44,7 +44,18 @@ def get_engine() -> Engine:
 
 @lru_cache(maxsize=1)
 def load_metro_geojson() -> dict:
-    """수도권 77개 시군구 경계 GeoJSON을 1회 로드 후 메모리 재사용."""
+    """수도권 시군구 경계 GeoJSON 을 1회 로드 후 메모리 재사용.
+
+    로드 단계에서:
+    1) GeometryCollection 을 Polygon/MultiPolygon 으로 정규화 (Leaflet 아티팩트 방지)
+    2) 시군구명을 DB 와 호환되는 canonical 형태로 보정 (예: 남구→미추홀구, 공백 삽입)
+    """
+    raw = _load_raw()
+    cleaned = _sanitize_polygons(raw)
+    return _canonicalize_names(cleaned)
+
+
+def _load_raw() -> dict:
     for path in _GEOJSON_CANDIDATES:
         if path.exists():
             with open(path, encoding="utf-8") as f:
@@ -52,3 +63,49 @@ def load_metro_geojson() -> dict:
     raise FileNotFoundError(
         f"metro_sgg.geojson not found in any of: {[str(p) for p in _GEOJSON_CANDIDATES]}"
     )
+
+
+def _canonicalize_names(gj: dict) -> dict:
+    """feature.properties.name 을 DB 와 매칭 가능한 형태로 고친 새 dict 반환."""
+    from dash_app.geo_names import normalize_geo_name
+
+    out_features = []
+    for f in gj.get("features", []):
+        props = dict(f.get("properties") or {})
+        code = props.get("code", "")
+        prefix = code[:2] if code else ""
+        props["name"] = normalize_geo_name(props.get("name", ""), prefix)
+        out_features.append({**f, "properties": props})
+    return {"type": "FeatureCollection", "features": out_features}
+
+
+def _sanitize_polygons(raw: dict) -> dict:
+    """feature.geometry 를 Polygon / MultiPolygon 으로 정규화.
+
+    GeometryCollection 내부에서 Polygon 만 추출하고, 여러 개면 MultiPolygon 으로 병합.
+    다각형이 하나도 없는 feature 는 버린다.
+    """
+    clean_features = []
+    for f in raw.get("features", []):
+        g = f.get("geometry") or {}
+        gtype = g.get("type")
+        if gtype in ("Polygon", "MultiPolygon"):
+            clean_features.append(f)
+            continue
+        if gtype == "GeometryCollection":
+            polys = []
+            for sub in g.get("geometries", []):
+                sub_type = sub.get("type")
+                if sub_type == "Polygon":
+                    polys.append(sub["coordinates"])
+                elif sub_type == "MultiPolygon":
+                    polys.extend(sub["coordinates"])
+            if not polys:
+                continue
+            new_geom: dict = (
+                {"type": "Polygon", "coordinates": polys[0]}
+                if len(polys) == 1
+                else {"type": "MultiPolygon", "coordinates": polys}
+            )
+            clean_features.append({**f, "geometry": new_geom})
+    return {"type": "FeatureCollection", "features": clean_features}

@@ -13,10 +13,7 @@ from dash import Input, Output, State, callback, dcc, html
 from dash.exceptions import PreventUpdate
 
 from dash_app import charts
-from dash_app.components.choropleth_map import (
-    ChoroplethMap,
-    prepare_choropleth_data,
-)
+from dash_app.components.choropleth_map import ChoroplethMap, build_hideout
 from dash_app.components.formatters import (
     format_count,
     format_percent,
@@ -24,6 +21,7 @@ from dash_app.components.formatters import (
 )
 from dash_app.components.kpi_card import KpiCard
 from dash_app.components.ranking_table import RankingTable
+from dash_app.geo_names import collapse_db_sgg_to_geo
 from dash_app.queries import gap_queries as gapq
 from dash_app.queries import metrics_queries as mq
 from dash_app.queries import nv_queries as nvq
@@ -179,7 +177,7 @@ def _sync_from_url(search: str | None, pathname: str | None):
     Output("kpi-region-jeonse-v", "children"),
     Output("kpi-region-active-v", "children"),
     Output("kpi-region-gap-v", "children"),
-    Output(f"{_MAP_ID}-geojson", "data"),
+    Output(f"{_MAP_ID}-geojson", "hideout"),
     Output("page-region-price-trend", "figure"),
     Output("page-region-rank-grid", "rowData"),
     Input("f-sido", "value"),
@@ -222,14 +220,15 @@ def _refresh_region(sido, sgg, dong, area, deal, period):
     # ---- Map ----
     try:
         sgg_df = mq.get_sgg_metrics(sido)
-        values_by_sgg = (
+        db_values = (
             dict(zip(sgg_df["sgg"], sgg_df["median_ppm2_6m"].fillna(0)))
             if not sgg_df.empty
             else {}
         )
     except Exception:
-        values_by_sgg = {}
-    map_data = prepare_choropleth_data(
+        db_values = {}
+    values_by_sgg = collapse_db_sgg_to_geo(db_values, aggregator="mean")
+    map_hideout = build_hideout(
         values_by_sgg,
         color_scale="Blues",
         selected_sgg=sgg if sgg and sgg != "전체" else None,
@@ -264,7 +263,7 @@ def _refresh_region(sido, sgg, dong, area, deal, period):
     return (
         scope_label,
         trade_v, ppm2_v, jeonse_v, active_v, gap_v,
-        map_data,
+        map_hideout,
         price_fig,
         row_data,
     )
