@@ -8,6 +8,7 @@ import dash
 from dash import Dash, dcc, html
 
 # Global callbacks (register via side effect)
+from dash_app.callbacks import filters as _filters  # noqa: F401
 from dash_app.callbacks import navigation as _nav  # noqa: F401
 from dash_app.callbacks import theme as _theme  # noqa: F401
 from dash_app.components.chat_panel import callbacks as _chat_cb  # noqa: F401

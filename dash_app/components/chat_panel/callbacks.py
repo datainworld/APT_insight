@@ -200,13 +200,13 @@ def _chat_submit(_send, _chip_clicks, input_val, msgs, busy, thread):
     State("chat-thread", "data"),
     State("f-sido", "value"),
     State("f-sgg", "value"),
-    State("f-dong", "value"),
     State("f-area", "value"),
     State("f-deal", "data"),
     State("f-period", "value"),
     prevent_initial_call=True,
 )
-def _chat_invoke(busy, msgs, thread, sido, sgg, dong, area, deal, period):
+def _chat_invoke(busy, msgs, thread, sido, sgg, area, deal, period):
+    dong = "전체"  # 읍면동 필터 제거됨
     if not busy:
         raise PreventUpdate
     if not msgs or msgs[-1].get("kind") != "typing":

@@ -20,32 +20,74 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 .filter-group label { font-size: var(--text-xs); color: var(--fg-2); text-transform: uppercase; letter-spacing: .4px; font-family: var(--font-mono); display:block; margin-bottom: 6px; font-weight: 600; }
 .filter-stack { display:flex; flex-direction:column; gap: 10px; }
 
-/* Dash Dropdown override — emulate design .select */
-.filter-group .Select--single > .Select-control,
-.filter-group .Select--multi > .Select-control,
-.filter-group .dash-dropdown .Select-control {
-  background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--radius-md);
-  color: var(--fg-1); min-height: 36px; cursor: pointer;
+/* Dash 4.x dcc.Dropdown 커스텀 — 컴팩트 (높이 28px · 텍스트 12px 흰색 굵게).
+   Dash 4.x 는 react-select 대신 자체 구현을 쓰며 클래스가 .dash-dropdown-* 로 바뀌었다.
+   Dash 기본 CSS 와의 specificity 충돌 회피를 위해 !important 사용. */
+.filter-group .dash-dropdown {
+  border: 1px solid var(--border-1) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--bg-3) !important;
+  min-height: 28px !important;
+  padding: 0 !important;
 }
-.filter-group .Select-control:hover { border-color: var(--border-2); }
-.filter-group .is-focused:not(.is-open) > .Select-control { border-color: var(--accent-1); box-shadow: none; }
-.filter-group .Select-value-label,
-.filter-group .Select-placeholder,
-.filter-group .Select--single > .Select-control .Select-value .Select-value-label { color: var(--fg-1) !important; line-height: 34px; font-size: var(--text-sm); }
-.filter-group .Select-arrow { border-color: #a0a0a0 transparent transparent; }
-.filter-group .Select-menu-outer {
-  background: var(--bg-3); border: 1px solid var(--border-1); border-radius: var(--radius-md); margin-top: 4px;
+.filter-group .dash-dropdown:hover { border-color: var(--border-2) !important; }
+.filter-group .dash-dropdown-trigger {
+  min-height: 28px !important;
+  padding: 3px 8px !important;
+  gap: 4px !important;
+  background: transparent !important;
+}
+.filter-group .dash-dropdown-value,
+.filter-group .dash-dropdown-value-item {
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+.filter-group .dash-dropdown-placeholder {
+  color: var(--fg-2) !important;
+  font-size: 12px !important;
+}
+.filter-group .dash-dropdown-trigger-icon {
+  color: var(--fg-2) !important;
+  font-size: 12px !important;
+}
+.filter-group .dash-dropdown-content {
+  background: var(--bg-3) !important;
+  border: 1px solid var(--border-1) !important;
+  border-radius: var(--radius-md) !important;
+  margin-top: 2px !important;
   box-shadow: var(--shadow-md);
 }
-.filter-group .Select-option { background: var(--bg-3); color: var(--fg-1); font-size: var(--text-sm); }
-.filter-group .Select-option.is-focused { background: var(--bg-4); color: var(--fg-1); }
-.filter-group .Select-option.is-selected { background: rgba(79,172,254,.12); color: var(--accent-1); }
+.filter-group .dash-dropdown-search {
+  color: #ffffff !important;
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+}
+.filter-group .dash-dropdown-option {
+  color: #ffffff !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  background: var(--bg-3) !important;
+}
+.filter-group .dash-dropdown-option:hover {
+  background: var(--bg-4) !important;
+}
+.filter-group .dash-dropdown-option[aria-selected="true"] {
+  background: rgba(79,172,254,.12) !important;
+  color: var(--accent-1) !important;
+}
 
 /* Segmented button group — 거래 유형 */
-.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--bg-3); border-radius: var(--radius-md); padding: 3px; border: 1px solid var(--border-1); }
+.seg {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
+  background: var(--bg-3); border-radius: var(--radius-md);
+  padding: 2px; border: 1px solid var(--border-1);
+}
 .seg button {
-  background: transparent; border: none; color: var(--fg-2); padding: 7px 0; font-family: inherit;
-  font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer;
+  background: transparent; border: none; color: var(--fg-2);
+  padding: 4px 0; font-family: inherit;
+  font-size: 11px; border-radius: var(--radius-sm); cursor: pointer;
 }
 .seg button.on { background: var(--accent-grad); color: #fff; font-weight: 600; }
 
@@ -85,6 +127,71 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 .kpi-tile .v { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--fg-1); }
 .kpi-tile .d { font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
 .kpi-tile .d.up { color: var(--pos); } .kpi-tile .d.down { color: var(--neg); }
+
+/* period subtitle (기준 시기/범위) · detail (보조 정보) */
+.kpi-tile .p { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); margin-top: -2px; }
+.kpi-tile .dt { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); line-height: 1.4; }
+
+/* 선행 지표 (예: 활성 매물 — 실거래보다 시장 심리를 빨리 반영) — 좌측 색상 바 + 배지 */
+.kpi-tile--leading {
+  border-left: 3px solid #FF9800;
+  position: relative;
+}
+.kpi-tile--leading::after {
+  content: "선행";
+  position: absolute;
+  top: 8px; right: 10px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #FF9800;
+  background: rgba(255, 152, 0, .12);
+  border-radius: 4px;
+  letter-spacing: .3px;
+}
+
+/* 클릭 가능 + 선택 상태 (지표 토글 역할) */
+.kpi-tile--clickable {
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.kpi-tile--clickable:hover { background: rgba(255,255,255,.03); }
+
+/* 선택 상태 — 지표별 색상으로 테두리 하이라이트 (맵의 choropleth 색과 일치) */
+.kpi-tile--selected { box-shadow-color: currentColor; }
+.kpi-tile--selected.kpi-tile--color-blue {
+  border-color: #4facfe; box-shadow: 0 0 0 1px #4facfe inset;
+  background: rgba(79, 172, 254, .06);
+}
+.kpi-tile--selected.kpi-tile--color-purple {
+  border-color: #9C27B0; box-shadow: 0 0 0 1px #9C27B0 inset;
+  background: rgba(156, 39, 176, .06);
+}
+.kpi-tile--selected.kpi-tile--color-green {
+  border-color: #4CAF50; box-shadow: 0 0 0 1px #4CAF50 inset;
+  background: rgba(76, 175, 80, .06);
+}
+.kpi-tile--selected.kpi-tile--color-orange {
+  border-color: #FF9800; box-shadow: 0 0 0 1px #FF9800 inset;
+  background: rgba(255, 152, 0, .06);
+}
+
+/* 시군구 필터 칩 — 맵 클릭 시 나타남 */
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(79, 172, 254, .14);
+  border: 1px solid rgba(79, 172, 254, .35);
+  color: var(--accent-1);
+  border-radius: 12px;
+  font-size: 11px; font-weight: 600;
+}
+.filter-chip button {
+  background: transparent; border: none; color: var(--fg-2);
+  cursor: pointer; font-size: 12px; padding: 0 2px; line-height: 1;
+}
+.filter-chip button:hover { color: var(--fg-1); }
 
 /* Tabs */
 .tab-strip { display:flex; gap: 2px; border-bottom: 1px solid var(--border-1); }

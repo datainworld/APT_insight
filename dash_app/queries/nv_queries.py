@@ -93,3 +93,26 @@ def active_listing_counts_by_sgg(sido: str | None = None) -> pd.DataFrame:
     """)
     with get_engine().connect() as conn:
         return pd.read_sql(sql, conn, params=params)
+
+
+def active_listing_breakdown_by_sgg(sido: str | None = None) -> pd.DataFrame:
+    """시군구별 활성 매물 수 — 거래유형(A1/B1/B2) 분해."""
+    where = ["l.is_active = TRUE"]
+    params: dict = {}
+    if sido and sido != "전체":
+        where.append("c.sido_name = :sido")
+        params["sido"] = sido
+    sql = text(f"""
+        SELECT c.sido_name AS sido, c.sgg_name AS sgg,
+               COUNT(*) FILTER (WHERE l.trade_type = 'A1') AS sale_count,
+               COUNT(*) FILTER (WHERE l.trade_type = 'B1') AS jeonse_count,
+               COUNT(*) FILTER (WHERE l.trade_type = 'B2') AS rent_count,
+               COUNT(*) AS total_count
+        FROM nv_listing l
+        JOIN nv_complex c ON l.complex_no = c.complex_no
+        WHERE {' AND '.join(where)} AND c.sgg_name IS NOT NULL
+        GROUP BY c.sido_name, c.sgg_name
+        ORDER BY total_count DESC
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params=params)

@@ -181,12 +181,12 @@ def _sync_from_url(search: str | None, pathname: str | None):
     Output("page-region-rank-grid", "rowData"),
     Input("f-sido", "value"),
     Input("f-sgg", "value"),
-    Input("f-dong", "value"),
     Input("f-area", "value"),
     Input("f-deal", "data"),
     Input("f-period", "value"),
 )
-def _refresh_region(sido, sgg, dong, area, deal, period):
+def _refresh_region(sido, sgg, area, deal, period):
+    dong = None  # 읍면동 필터 제거됨 — 시군구 단위까지만 필터링
     sido = sido or "서울특별시"
 
     # ---- KPI / scope ----

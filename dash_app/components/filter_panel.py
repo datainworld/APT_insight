@@ -1,7 +1,9 @@
-"""필터 사이드바 — 시도·시군구·동·면적·거래유형·기간.
+"""필터 사이드바 — 시도·시군구·면적·거래유형·기간.
 
-기존 components.sidebar() 를 이동한 것으로, 컨트롤 ID는 전역 유일(`f-*`)이다.
-페이지가 필터를 필요로 하지 않으면 상위에서 렌더하지 않는다.
+단순화 이력:
+- 읍면동(f-dong) 제거: 시군구 단위까지만 필터링.
+- btn-apply / btn-reset 제거: 모든 드롭다운 변경이 즉시 콜백을 트리거.
+- 기간 슬라이더 max=36 (최근 3년).
 """
 
 from __future__ import annotations
@@ -51,20 +53,6 @@ def filter_panel(
                             html.Label("자치구"),
                             dcc.Dropdown(
                                 id="f-sgg",
-                                options=[{"label": "전체", "value": "전체"}],
-                                value="전체",
-                                clearable=False,
-                                searchable=True,
-                                className="select",
-                            ),
-                        ],
-                    ),
-                    html.Div(
-                        className="filter-group",
-                        children=[
-                            html.Label("읍면동"),
-                            dcc.Dropdown(
-                                id="f-dong",
                                 options=[{"label": "전체", "value": "전체"}],
                                 value="전체",
                                 clearable=False,
@@ -128,10 +116,10 @@ def filter_panel(
                             dcc.Slider(
                                 id="f-period",
                                 min=1,
-                                max=120,
+                                max=36,
                                 step=1,
                                 value=36,
-                                marks={6: "6M", 12: "1Y", 36: "3Y", 60: "5Y", 120: "전체"},
+                                marks={3: "3M", 6: "6M", 12: "1Y", 24: "2Y", 36: "3Y"},
                                 tooltip={"always_visible": False, "placement": "bottom"},
                                 included=True,
                             ),
@@ -139,13 +127,6 @@ def filter_panel(
                     ),
                 ],
             ),
-            html.Button(
-                [_fa("filter"), " 조건 적용"],
-                id="btn-apply",
-                className="btn-apply",
-                n_clicks=0,
-            ),
-            html.Button("초기화", id="btn-reset", className="btn-reset", n_clicks=0),
             html.Div(
                 className="stamp",
                 children=[

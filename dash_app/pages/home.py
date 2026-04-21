@@ -1,17 +1,39 @@
-"""시장 개요 페이지 (/). 기존 단일 페이지 대시보드를 그대로 이관."""
+"""시장 개요 페이지 (/) — 스펙 3.1 + 사용자 피드백 반영.
+
+구성:
+- KPI 4개 (각각 고유 색상, 클릭 시 맵 지표 전환):
+    · 거래량 (직전 완료월 + MoM)
+    · 평당가 (최근 6M 중위 + 이전 6M 대비)
+    · 전세가율 (최근 6M 평균 + 이전 6M 대비)
+    · 활성 매물 (선행 지표, 매매/전세/월세 분해)
+- 메인 choropleth — 선택된 KPI 지표를 색상으로 반영
+  · 시군구 클릭 → 페이지 내 필터 (KPI/trend 모두 그 시군구로 narrowing)
+- 36개월 거래량 · 평당가 dual-axis 라인 (맵 우측)
+
+설계 원칙:
+- 단지 내 다면적 혼재로 단지 평균가는 의미 없음 → 모든 가격 지표는 평당(만원/㎡) 기준.
+- 월 거래량 비교는 신고 유예(30일) 고려해 직전 완료월(2개월 전) vs 그 전월.
+- 6M 윈도우 지표는 최근 6M vs 이전 6M 비교.
+- 활성 매물은 스냅샷이라 시간 비교가 어려움 → 분해 표시로 대체.
+"""
 
 from __future__ import annotations
 
-import math
-import traceback
-
 import dash
+import pandas as pd
+import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, callback, ctx, dcc, html
 from dash.exceptions import PreventUpdate
+from sqlalchemy import text
 
-from dash_app import charts
-from dash_app.config import DEAL_LABELS
-from dash_app.queries import rt_queries as q
+from dash_app.components.choropleth_map import ChoroplethMap, build_hideout
+from dash_app.components.formatters import format_count, format_percent, format_ppm2
+from dash_app.components.kpi_card import KpiCard
+from dash_app.db import get_engine
+from dash_app.geo_names import collapse_db_sgg_to_geo
+from dash_app.queries import metrics_queries as mq
+from dash_app.queries import nv_queries as nvq
+from dash_app.theme import ACCENT_2, apply_dark_theme
 
 dash.register_page(
     __name__,
@@ -22,13 +44,41 @@ dash.register_page(
 )
 
 
-# ---------------------------------------------------------------------------
-# Layout pieces (home-local)
-# ---------------------------------------------------------------------------
+_MAP_ID = "page-home-map"
+_METRIC_LABELS = {
+    "trade_count": "거래량",
+    "ppm2": "평당가",
+    "jeonse": "전세가율",
+    "active": "활성 매물",
+}
+_METRIC_SCALE = {
+    "trade_count": "Blues",
+    "ppm2": "Purples",
+    "jeonse": "Greens",
+    "active": "Oranges",
+}
+_METRIC_COLOR = {
+    "trade_count": "blue",
+    "ppm2": "purple",
+    "jeonse": "green",
+    "active": "orange",
+}
+# 툴팁 값 포맷 타입 (JS 가 사용). 라벨은 각 KPI 의 실제 기간에 맞춰 콜백에서 구성.
+_METRIC_VALUE_FORMAT = {
+    "trade_count": "count",
+    "ppm2": "ppm2",
+    "jeonse": "percent",
+    "active": "count",
+}
 
 
-def _fa(icon: str) -> html.I:
-    return html.I(className=f"fa-solid fa-{icon}")
+def _tile_id(metric: str) -> dict:
+    return {"role": "home-kpi", "metric": metric}
+
+
+# ---------------------------------------------------------------------------
+# Layout
+# ---------------------------------------------------------------------------
 
 
 def _page_head() -> html.Div:
@@ -38,10 +88,9 @@ def _page_head() -> html.Div:
             html.H1("부동산 거래 분석 대시보드"),
             html.Div(
                 className="live",
-                id="page-live-stamp",
                 children=[
                     html.Span(className="dot-live"),
-                    "실시간 · rt_trade / nv_listing",
+                    html.Span(id="page-home-scope", children="—"),
                 ],
             ),
         ],
@@ -52,219 +101,97 @@ def _kpi_strip() -> html.Div:
     return html.Div(
         className="kpi-strip",
         children=[
-            html.Div(
-                className="kpi-tile",
-                children=[
-                    html.Div("조회 범위", className="l"),
-                    html.Div(
-                        id="kpi-scope-v",
-                        className="v",
-                        style={
-                            "fontSize": 16,
-                            "fontFamily": "var(--font-sans)",
-                            "color": "var(--accent-1)",
-                        },
-                        children="—",
-                    ),
-                    html.Div(id="kpi-scope-d", className="d", children="—"),
-                ],
+            KpiCard(
+                "거래량",
+                value_id="kpi-home-trade-v",
+                period_id="kpi-home-trade-p",
+                detail_id="kpi-home-trade-d",
+                tile_id=_tile_id("trade_count"),
+                color="blue",
+                clickable=True,
+                selected=True,
             ),
-            html.Div(
-                className="kpi-tile",
-                children=[
-                    html.Div("총 거래건수", className="l"),
-                    html.Div(id="kpi-total-v", className="v", children="—"),
-                    html.Div(id="kpi-total-d", className="d", children=" "),
-                ],
+            KpiCard(
+                "평당가",
+                value_id="kpi-home-ppm2-v",
+                period_id="kpi-home-ppm2-p",
+                term="평당가",
+                tile_id=_tile_id("ppm2"),
+                color="purple",
+                clickable=True,
             ),
-            html.Div(
-                className="kpi-tile",
-                children=[
-                    html.Div("집계 단지 수", className="l"),
-                    html.Div(id="kpi-uniq-v", className="v", children="—"),
-                    html.Div(id="kpi-uniq-d", className="d", children=" "),
-                ],
+            KpiCard(
+                "전세가율",
+                value_id="kpi-home-jeonse-v",
+                period_id="kpi-home-jeonse-p",
+                term="전세가율",
+                tile_id=_tile_id("jeonse"),
+                color="green",
+                clickable=True,
             ),
-            html.Div(
-                className="kpi-tile",
-                children=[
-                    html.Div("최다 단지 거래", className="l"),
-                    html.Div(id="kpi-max-v", className="v", children="—"),
-                    html.Div(id="kpi-max-d", className="d", children=" "),
-                ],
+            KpiCard(
+                "활성 매물",
+                value_id="kpi-home-active-v",
+                period_id="kpi-home-active-p",
+                detail_id="kpi-home-active-d",
+                term="활성_매물",
+                tile_id=_tile_id("active"),
+                color="orange",
+                kind="leading",
+                clickable=True,
             ),
+            dcc.Store(id="home-metric", data="trade_count"),
+            dcc.Store(id="home-selected-sgg", data=None),
         ],
     )
 
 
-def _tab_strip() -> html.Div:
+def _map_card() -> html.Div:
     return html.Div(
+        className="card",
+        style={"padding": 0, "overflow": "hidden"},
         children=[
             html.Div(
-                className="tab-strip",
-                id="tab-strip",
+                className="card-head",
+                style={"padding": "14px 16px 8px"},
                 children=[
-                    html.Button(
-                        "인트로",
-                        id={"role": "tab", "value": "intro"},
-                        className="on",
-                        n_clicks=0,
-                    ),
-                    html.Button(
-                        "거래건수",
-                        id={"role": "tab", "value": "volume"},
-                        n_clicks=0,
-                    ),
-                    html.Button(
-                        "가격변화",
-                        id={"role": "tab", "value": "price"},
-                        n_clicks=0,
-                    ),
-                ],
-            ),
-            dcc.Store(id="active-tab", data="intro"),
-            html.Div(
-                className="card",
-                style={"borderTopLeftRadius": 0, "borderTopRightRadius": 8},
-                children=[
+                    html.Div(className="ic", children=html.I(className="fa-solid fa-map")),
+                    html.Div(className="t", id="page-home-map-title", children="수도권 시군구 지표"),
                     html.Div(
-                        className="card-head",
+                        className="s",
                         children=[
-                            html.Div(id="chart-card-ic", className="ic", children=_fa("chart-line")),
-                            html.Div(id="chart-card-title", className="t", children="거래추이"),
-                            html.Div(id="chart-card-sub", className="s", children=""),
+                            html.Span("KPI 클릭으로 지표 전환 · 시군구 클릭으로 필터링"),
+                            html.Span(id="page-home-selected-chip"),
                         ],
                     ),
-                    dcc.Graph(
-                        id="main-chart",
-                        config={"displayModeBar": False, "responsive": True},
-                        style={"width": "100%", "height": 320},
-                    ),
                 ],
             ),
+            ChoroplethMap(_MAP_ID, {}, color_scale="Blues", height=520),
         ],
     )
 
 
-def _map_row() -> html.Div:
-    return html.Div(
-        className="row2-28",
-        children=[
-            html.Div(
-                className="card",
-                children=[
-                    html.Div(
-                        className="card-head",
-                        children=[
-                            html.Div(
-                                className="ic",
-                                style={
-                                    "background": "rgba(217, 88, 74, .15)",
-                                    "color": "#e56b5d",
-                                },
-                                children=_fa("map"),
-                            ),
-                            html.Div(className="t", children="행정구역(시군구)별 거래 건수"),
-                            html.Div(className="s", children="클릭 시 필터 반영"),
-                        ],
-                    ),
-                    html.Div(
-                        className="map-wrap",
-                        children=[
-                            dcc.Graph(
-                                id="choropleth",
-                                config={
-                                    "displayModeBar": False,
-                                    "responsive": True,
-                                    "scrollZoom": False,
-                                },
-                                style={"width": "100%", "height": "100%"},
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-            html.Div(
-                className="card",
-                children=[
-                    html.Div(
-                        className="card-head",
-                        children=[
-                            html.Div(
-                                className="ic",
-                                style={
-                                    "background": "rgba(229, 57, 53, .18)",
-                                    "color": "#e53935",
-                                },
-                                children=_fa("location-dot"),
-                            ),
-                            html.Div(className="t", children="아파트별 매매 건수 (지도)"),
-                            html.Div(className="s", children="원 크기 = 거래 건수"),
-                        ],
-                    ),
-                    html.Div(
-                        className="dot-map-note",
-                        children=[
-                            html.B("●"),
-                            " 붉은 원은 아파트 위치이며, 크기는 거래 건수입니다.",
-                        ],
-                    ),
-                    html.Div(
-                        className="dot-map-wrap",
-                        children=[
-                            dcc.Graph(
-                                id="dot-map",
-                                config={
-                                    "displayModeBar": False,
-                                    "responsive": True,
-                                    "scrollZoom": True,
-                                },
-                                style={"width": "100%", "height": "100%"},
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-        ],
-    )
-
-
-def _apt_table_card() -> html.Div:
+def _trend_card() -> html.Div:
     return html.Div(
         className="card",
         children=[
             html.Div(
                 className="card-head",
                 children=[
-                    html.Div(className="ic", children=_fa("table")),
-                    html.Div(className="t", children="아파트별 매매 건수 (테이블)"),
-                    html.Div(className="s", children="컬럼 헤더 클릭 시 정렬 · 페이지 10개"),
-                ],
-            ),
-            html.Div(id="apt-table-sub", className="sub", children="—"),
-            html.Div(
-                id="apt-table-host",
-                className="apt-table-wrap",
-                children=[
+                    html.Div(className="ic", children=html.I(className="fa-solid fa-chart-line")),
                     html.Div(
-                        "데이터 준비 중…",
-                        style={"padding": "20px", "color": "var(--fg-3)"},
-                    )
+                        className="t",
+                        id="page-home-trend-title",
+                        children="36개월 거래량 · 평당가 추이",
+                    ),
+                    html.Div(className="s", children="좌축 거래건수 · 우축 평당 중위 (만원/㎡)"),
                 ],
             ),
-            html.Div(
-                className="pager",
-                children=[
-                    html.Button(_fa("angles-left"), id="tb-first", n_clicks=0),
-                    html.Button(_fa("angle-left"), id="tb-prev", n_clicks=0),
-                    html.Span("1", id="tb-cur", className="cur"),
-                    html.Span(id="tb-total", children="/ 1"),
-                    html.Button(_fa("angle-right"), id="tb-next", n_clicks=0),
-                    html.Button(_fa("angles-right"), id="tb-last", n_clicks=0),
-                ],
+            dcc.Graph(
+                id="page-home-trend",
+                config={"displayModeBar": False, "responsive": True},
+                style={"height": 520},
             ),
-            dcc.Store(id="tb-page", data=1),
-            dcc.Store(id="tb-sort", data={"key": "count", "dir": -1}),
         ],
     )
 
@@ -274,398 +201,466 @@ layout = html.Main(
     children=[
         _page_head(),
         _kpi_strip(),
-        _tab_strip(),
-        _map_row(),
-        _apt_table_card(),
+        html.Div(
+            className="row2-28",
+            children=[_map_card(), _trend_card()],
+        ),
     ],
 )
 
 
 # ---------------------------------------------------------------------------
-# Callbacks (page-local). Registered at import time via @callback.
+# Query helpers (home-local) — period-over-period comparisons
 # ---------------------------------------------------------------------------
 
 
-def _filter_from_state(sido, sgg, dong, area, deal, period) -> q.Filter:
-    return q.Filter(
-        sido=sido or "서울특별시",
-        sgg=sgg or "전체",
-        dong=dong or "전체",
-        area=area or "전체",
-        deal=deal or "sale",
-        period_months=int(period or 36),
+def _trade_volume_breakdown(sido: str, sgg: str | None) -> tuple[str, dict]:
+    """직전 완료월(2M 전) 매매/전세/월세 거래량 분해.
+
+    Returns: (ym_label, {"sale": n, "jeonse": n, "rent": n, "total": n})
+    신고 유예(30일) 때문에 최근 1개월은 신뢰 불가 → 2개월 전(= 직전 완료월)을 사용.
+    """
+    where_c = ["c.sido_name = :sido"]
+    params: dict = {"sido": sido}
+    if sgg:
+        where_c.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+    common = " AND ".join(where_c)
+
+    sql = text(f"""
+        WITH win AS (
+            SELECT date_trunc('month', CURRENT_DATE - INTERVAL '2 months') AS start_d,
+                   date_trunc('month', CURRENT_DATE - INTERVAL '1 month')  AS end_d
+        ),
+        sale AS (
+            SELECT COUNT(*) AS n
+            FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id, win w
+            WHERE {common}
+              AND deal_date >= w.start_d AND deal_date < w.end_d
+        ),
+        rent AS (
+            SELECT
+                COUNT(*) FILTER (WHERE r.monthly_rent = 0) AS jeonse_n,
+                COUNT(*) FILTER (WHERE r.monthly_rent > 0) AS rent_n
+            FROM rt_rent r JOIN rt_complex c ON r.apt_id = c.apt_id, win w
+            WHERE {common}
+              AND r.deal_date >= w.start_d AND r.deal_date < w.end_d
+        )
+        SELECT
+            (SELECT n FROM sale)        AS sale_n,
+            (SELECT jeonse_n FROM rent) AS jeonse_n,
+            (SELECT rent_n FROM rent)   AS rent_n,
+            to_char((SELECT start_d FROM win), 'YYYY-MM') AS ym
+    """)
+    with get_engine().connect() as conn:
+        row = dict(conn.execute(sql, params).mappings().fetchone() or {})
+    sale = int(row.get("sale_n") or 0)
+    jeonse = int(row.get("jeonse_n") or 0)
+    rent = int(row.get("rent_n") or 0)
+    return row.get("ym", "—"), {
+        "sale": sale,
+        "jeonse": jeonse,
+        "rent": rent,
+        "total": sale + jeonse + rent,
+    }
+
+
+def _ppm2_median_6m(sido: str, sgg: str | None) -> tuple[float | None, str]:
+    """최근 6M 평당 중위 + 윈도우 라벨 문자열."""
+    wheres = ["c.sido_name = :sido", "exclusive_area > 0"]
+    params: dict = {"sido": sido}
+    if sgg:
+        wheres.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+    sql = text(f"""
+        SELECT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+                ORDER BY deal_amount / NULLIF(exclusive_area, 0)
+            ) AS cur,
+            to_char(MIN(deal_date), 'YYYY-MM') AS start_ym,
+            to_char(MAX(deal_date), 'YYYY-MM') AS end_ym
+        FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id
+        WHERE {' AND '.join(wheres)}
+          AND deal_date >= CURRENT_DATE - INTERVAL '6 months'
+    """)
+    with get_engine().connect() as conn:
+        row = dict(conn.execute(sql, params).mappings().fetchone() or {})
+    cur = float(row["cur"]) if row.get("cur") is not None else None
+    label = (
+        f"{row.get('start_ym')} ~ {row.get('end_ym')}"
+        if row.get("start_ym") and row.get("end_ym")
+        else "—"
     )
+    return cur, label
 
 
-def _format_period(months: int) -> list:
-    if months >= 120:
-        return ["전체", html.Span("", className="unit")]
-    if months >= 12:
-        years = months / 12
-        txt = f"{years:.0f}" if months % 12 == 0 else f"{years:.1f}"
-        return [txt, html.Span("년", className="unit")]
-    return [str(months), html.Span("개월", className="unit")]
+def _jeonse_ratio_1m(sido: str, sgg: str | None) -> tuple[float | None, str]:
+    """직전 완료월(2M 전) 전세가율. 평당 중위 기반."""
+    wheres_common = ["c.sido_name = :sido", "exclusive_area > 0"]
+    params: dict = {"sido": sido}
+    if sgg:
+        wheres_common.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+    common = " AND ".join(wheres_common)
 
-
-def _scope_text(f: q.Filter) -> str:
-    if f.dong and f.dong != "전체":
-        return f"{f.sido} · {f.sgg} · {f.dong}"
-    if f.sgg and f.sgg != "전체":
-        return f"{f.sido} · {f.sgg}"
-    return f.sido
-
-
-def _render_apt_table(df, sort_key: str, sort_dir: int, page: int, per_page: int = 10):
-    if df is None or df.empty:
-        return (
-            html.Div(
-                "해당 조건의 거래가 없습니다.",
-                style={"padding": "20px", "color": "var(--fg-3)"},
-            ),
-            1,
-            1,
+    sql = text(f"""
+        WITH win AS (
+            SELECT
+                date_trunc('month', CURRENT_DATE - INTERVAL '2 months') AS start_d,
+                date_trunc('month', CURRENT_DATE - INTERVAL '1 month')  AS end_d
+        ),
+        sale AS (
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY deal_amount / NULLIF(exclusive_area, 0)
+                   ) AS v
+            FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id, win w
+            WHERE {common} AND deal_date >= w.start_d AND deal_date < w.end_d
+        ),
+        jeonse AS (
+            SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY deposit / NULLIF(exclusive_area, 0)
+                   ) AS v
+            FROM rt_rent r JOIN rt_complex c ON r.apt_id = c.apt_id, win w
+            WHERE {common} AND r.deal_date >= w.start_d AND r.deal_date < w.end_d
+              AND r.monthly_rent = 0
         )
+        SELECT
+            (SELECT v FROM jeonse) / NULLIF((SELECT v FROM sale), 0) AS ratio,
+            to_char((SELECT start_d FROM win), 'YYYY-MM') AS ym
+    """)
+    with get_engine().connect() as conn:
+        row = dict(conn.execute(sql, params).mappings().fetchone() or {})
+    ratio = float(row["ratio"]) if row.get("ratio") is not None else None
+    return ratio, row.get("ym", "—")
 
-    if sort_key in df.columns:
-        df = df.sort_values(sort_key, ascending=(sort_dir > 0), na_position="last")
-    total_pages = max(1, math.ceil(len(df) / per_page))
-    page = min(max(1, page), total_pages)
-    start = (page - 1) * per_page
-    sub = df.iloc[start : start + per_page]
 
-    def th(label: str, col: str, align_right: bool = False) -> html.Th:
-        sorted_now = sort_key == col
-        ord_txt = ("▼" if sort_dir < 0 else "▲") if sorted_now else "▴"
-        return html.Th(
-            [label, " ", html.Span(ord_txt, className="ord")],
-            id={"role": "th", "col": col},
-            className="sort" if sorted_now else "",
-            style={"textAlign": "right"} if align_right else None,
-            n_clicks=0,
+def _active_listing_snapshot(sido: str, sgg: str | None) -> dict:
+    """현재 활성 매물 — 거래유형 분해. 스냅샷이라 시간 비교 없음."""
+    wheres = ["c.sido_name = :sido"]
+    params: dict = {"sido": sido}
+    if sgg:
+        wheres.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+    common = " AND ".join(wheres)
+
+    sql = text(f"""
+        SELECT
+            COUNT(*)                                                        AS total,
+            COUNT(*) FILTER (WHERE l.trade_type = 'A1')                     AS sale,
+            COUNT(*) FILTER (WHERE l.trade_type = 'B1')                     AS jeonse,
+            COUNT(*) FILTER (WHERE l.trade_type = 'B2')                     AS rent
+        FROM nv_listing l
+        JOIN nv_complex c ON l.complex_no = c.complex_no
+        WHERE {common} AND c.sgg_name IS NOT NULL AND l.is_active = TRUE
+    """)
+    with get_engine().connect() as conn:
+        row = dict(conn.execute(sql, params).mappings().fetchone() or {})
+    return {
+        "total": int(row.get("total") or 0),
+        "sale": int(row.get("sale") or 0),
+        "jeonse": int(row.get("jeonse") or 0),
+        "rent": int(row.get("rent") or 0),
+    }
+
+
+def _sgg_trade_1m(sido: str) -> dict[str, float]:
+    """시군구별 직전 완료월 거래량 (KPI 기간과 동일하게 1M 정렬)."""
+    sql = text("""
+        WITH win AS (
+            SELECT date_trunc('month', CURRENT_DATE - INTERVAL '2 months') AS start_d,
+                   date_trunc('month', CURRENT_DATE - INTERVAL '1 month')  AS end_d
         )
+        SELECT c.sgg_name AS sgg, COUNT(*) AS n
+        FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id, win w
+        WHERE c.sido_name = :sido AND c.sgg_name IS NOT NULL
+          AND t.deal_date >= w.start_d AND t.deal_date < w.end_d
+        GROUP BY c.sgg_name
+    """)
+    with get_engine().connect() as conn:
+        rows = conn.execute(sql, {"sido": sido}).fetchall()
+    return {r[0]: float(r[1] or 0) for r in rows}
 
-    head = html.Thead(
-        html.Tr(
-            [
-                th("자치구", "sgg"),
-                th("행정동", "admin_dong"),
-                th("아파트", "apt_name"),
-                th("건축년도", "build_year", align_right=True),
-                th("거래건수", "count", align_right=True),
-            ]
+
+def _sgg_jeonse_1m(sido: str) -> dict[str, float]:
+    """시군구별 직전 완료월 전세가율(%). 평당 기준."""
+    sql = text("""
+        WITH win AS (
+            SELECT date_trunc('month', CURRENT_DATE - INTERVAL '2 months') AS start_d,
+                   date_trunc('month', CURRENT_DATE - INTERVAL '1 month')  AS end_d
+        ),
+        sale AS (
+            SELECT c.sgg_name AS sgg,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY deal_amount / NULLIF(exclusive_area, 0)
+                   ) AS v
+            FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id, win w
+            WHERE c.sido_name = :sido AND c.sgg_name IS NOT NULL
+              AND t.deal_date >= w.start_d AND t.deal_date < w.end_d
+              AND exclusive_area > 0
+            GROUP BY c.sgg_name
+        ),
+        jeonse AS (
+            SELECT c.sgg_name AS sgg,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY deposit / NULLIF(exclusive_area, 0)
+                   ) AS v
+            FROM rt_rent r JOIN rt_complex c ON r.apt_id = c.apt_id, win w
+            WHERE c.sido_name = :sido AND c.sgg_name IS NOT NULL
+              AND r.deal_date >= w.start_d AND r.deal_date < w.end_d
+              AND r.monthly_rent = 0 AND exclusive_area > 0
+            GROUP BY c.sgg_name
+        )
+        SELECT s.sgg, (j.v / NULLIF(s.v, 0)) * 100 AS ratio_pct
+        FROM sale s JOIN jeonse j ON s.sgg = j.sgg
+        WHERE s.v IS NOT NULL AND j.v IS NOT NULL
+    """)
+    with get_engine().connect() as conn:
+        rows = conn.execute(sql, {"sido": sido}).fetchall()
+    return {r[0]: float(r[1]) for r in rows if r[1] is not None}
+
+
+def _metric_values(sido: str, metric: str) -> dict[str, float]:
+    """sgg별 지표 값 — 맵 color + 툴팁 원본값. KPI 와 기간을 맞춤."""
+    try:
+        if metric == "trade_count":
+            return _sgg_trade_1m(sido)
+        if metric == "ppm2":
+            df = mq.get_sgg_metrics(sido)
+            return dict(zip(df["sgg"], df["median_ppm2_6m"].fillna(0))) if not df.empty else {}
+        if metric == "jeonse":
+            return _sgg_jeonse_1m(sido)
+        if metric == "active":
+            df = nvq.active_listing_counts_by_sgg(sido)
+            return dict(zip(df["sgg"], df["active_listings"].fillna(0))) if not df.empty else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _build_trend_chart(sido: str, sgg: str | None) -> go.Figure:
+    wheres = ["c.sido_name = :sido", "exclusive_area > 0"]
+    params: dict = {"sido": sido}
+    if sgg:
+        wheres.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+    sql = text(f"""
+        SELECT to_char(deal_date, 'YYYY-MM') AS ym,
+               COUNT(*) AS trade_count,
+               PERCENTILE_CONT(0.5) WITHIN GROUP (
+                   ORDER BY deal_amount / NULLIF(exclusive_area, 0)
+               ) AS median_ppm2
+        FROM rt_trade t JOIN rt_complex c ON t.apt_id = c.apt_id
+        WHERE {' AND '.join(wheres)}
+          AND deal_date >= CURRENT_DATE - INTERVAL '36 months'
+        GROUP BY ym ORDER BY ym
+    """)
+    with get_engine().connect() as conn:
+        df = pd.read_sql(sql, conn, params=params)
+
+    fig = go.Figure()
+    if df.empty:
+        fig.add_annotation(
+            text="데이터 없음", showarrow=False, font=dict(color="#777"),
+            xref="paper", yref="paper", x=0.5, y=0.5,
+        )
+        return apply_dark_theme(fig, margin=dict(l=10, r=10, t=10, b=10))
+
+    fig.add_trace(
+        go.Bar(
+            x=df["ym"], y=df["trade_count"], name="거래량",
+            marker=dict(color="rgba(79, 172, 254, .35)"),
+            hovertemplate="%{x}<br>거래량 %{y:,}건<extra></extra>",
+            yaxis="y",
         )
     )
-
-    rows = []
-    for _, r in sub.iterrows():
-        rows.append(
-            html.Tr(
-                [
-                    html.Td(r.get("sgg") or "—"),
-                    html.Td(r.get("admin_dong") or "—"),
-                    html.Td(r.get("apt_name") or "—", className="apt-name"),
-                    html.Td(
-                        "—" if r.get("build_year") is None else f"{int(r['build_year'])}",
-                        className="num",
-                    ),
-                    html.Td(f"{int(r['count']):,}", className="num"),
-                ]
-            )
+    fig.add_trace(
+        go.Scatter(
+            x=df["ym"], y=df["median_ppm2"], name="평당 중위",
+            mode="lines+markers",
+            line=dict(color=ACCENT_2, width=2, shape="spline"),
+            marker=dict(size=4),
+            hovertemplate="%{x}<br>평당 중위 %{y:,.0f}만원/㎡<extra></extra>",
+            yaxis="y2",
         )
+    )
+    apply_dark_theme(fig, margin=dict(l=56, r=56, t=24, b=40))
+    fig.update_layout(
+        yaxis=dict(title=dict(text="거래건수", font=dict(size=10))),
+        yaxis2=dict(
+            title=dict(text="평당 중위 (만원/㎡)", font=dict(size=10)),
+            overlaying="y", side="right", showgrid=False,
+        ),
+        legend=dict(orientation="h", x=0, y=1.08, font=dict(size=11)),
+    )
+    return fig
 
-    return html.Table(className="apt-table", children=[head, html.Tbody(rows)]), total_pages, page
+
+# ---------------------------------------------------------------------------
+# Callbacks
+# ---------------------------------------------------------------------------
 
 
-# --- Sido → sgg options/value ---
 @callback(
-    Output("f-sgg", "options"),
-    Output("f-sgg", "value"),
-    Input("f-sido", "value"),
+    Output("home-metric", "data"),
+    Input({"role": "home-kpi", "metric": ALL}, "n_clicks"),
+    State("home-metric", "data"),
 )
-def _cascade_sgg(sido):
-    sggs = q.list_sgg(sido) if sido else ()
-    opts = [{"label": "전체", "value": "전체"}] + [
-        {"label": s, "value": s} for s in sggs
-    ]
-    return opts, "전체"
-
-
-# --- Sgg → dong options/value ---
-@callback(
-    Output("f-dong", "options"),
-    Output("f-dong", "value"),
-    Input("f-sido", "value"),
-    Input("f-sgg", "value"),
-)
-def _cascade_dong(sido, sgg):
-    if not sido or not sgg or sgg == "전체":
-        return [{"label": "전체", "value": "전체"}], "전체"
-    dongs = q.list_dong(sido, sgg)
-    opts = [{"label": "전체", "value": "전체"}] + [{"label": d, "value": d} for d in dongs]
-    return opts, "전체"
-
-
-# --- Period slider → label ---
-@callback(Output("f-period-label", "children"), Input("f-period", "value"))
-def _period_label(v):
-    return _format_period(int(v or 36))
-
-
-# --- Deal segment buttons → f-deal store + on class ---
-@callback(
-    Output("f-deal", "data"),
-    Output({"role": "seg-deal", "value": ALL}, "className"),
-    Input({"role": "seg-deal", "value": ALL}, "n_clicks"),
-    State({"role": "seg-deal", "value": ALL}, "id"),
-    State("f-deal", "data"),
-)
-def _deal_seg(n_clicks, ids, current):
+def _kpi_click_to_metric(n_clicks, current):
     trig = ctx.triggered_id
-    if not trig or not any(n_clicks):
-        picked = current or "sale"
-    else:
-        picked = trig["value"]
-    return picked, ["on" if i["value"] == picked else "" for i in ids]
-
-
-# --- Tab buttons → active-tab store + on class ---
-@callback(
-    Output("active-tab", "data"),
-    Output({"role": "tab", "value": ALL}, "className"),
-    Input({"role": "tab", "value": ALL}, "n_clicks"),
-    State({"role": "tab", "value": ALL}, "id"),
-    State("active-tab", "data"),
-)
-def _tab_switch(n_clicks, ids, current):
-    trig = ctx.triggered_id
-    if not trig or not any(n_clicks):
-        picked = current or "intro"
-    else:
-        picked = trig["value"]
-    return picked, ["on" if i["value"] == picked else "" for i in ids]
-
-
-# --- Reset button ---
-@callback(
-    Output("f-sido", "value"),
-    Output("f-sgg", "value", allow_duplicate=True),
-    Output("f-dong", "value", allow_duplicate=True),
-    Output("f-area", "value"),
-    Output("f-deal", "data", allow_duplicate=True),
-    Output("f-period", "value"),
-    Input("btn-reset", "n_clicks"),
-    prevent_initial_call=True,
-)
-def _reset(_n):
-    return "서울특별시", "전체", "전체", "전체", "sale", 36
-
-
-# --- Choropleth click → set sgg ---
-@callback(
-    Output("f-sgg", "value", allow_duplicate=True),
-    Input("choropleth", "clickData"),
-    prevent_initial_call=True,
-)
-def _choro_click(click):
-    if not click or not click.get("points"):
+    if not trig or not any(n_clicks or []):
         raise PreventUpdate
-    pt = click["points"][0]
-    name = pt.get("location") or pt.get("customdata")
+    return trig.get("metric", current or "trade_count")
+
+
+@callback(
+    Output({"role": "home-kpi", "metric": ALL}, "className"),
+    Input("home-metric", "data"),
+    State({"role": "home-kpi", "metric": ALL}, "id"),
+)
+def _kpi_highlight(metric, ids):
+    metric = metric or "trade_count"
+    out = []
+    for i in ids:
+        classes = [
+            "kpi-tile",
+            f"kpi-tile--color-{_METRIC_COLOR[i['metric']]}",
+            "kpi-tile--clickable",
+        ]
+        if i["metric"] == "active":
+            classes.append("kpi-tile--leading")
+        if i["metric"] == metric:
+            classes.append("kpi-tile--selected")
+        out.append(" ".join(classes))
+    return out
+
+
+@callback(
+    Output("home-selected-sgg", "data", allow_duplicate=True),
+    Input(f"{_MAP_ID}-geojson", "clickData"),
+    State("_url", "pathname"),
+    prevent_initial_call=True,
+)
+def _map_click_to_selection(click, pathname):
+    """홈에서 시군구 클릭 → 페이지 내 필터 스토어 갱신."""
+    if pathname != "/" or not click:
+        raise PreventUpdate
+    name = (click.get("properties") or {}).get("name")
     if not name:
         raise PreventUpdate
     return name
 
 
-# --- Main refresh: KPIs + charts + table on apply/change ---
 @callback(
-    Output("kpi-scope-v", "children"),
-    Output("kpi-scope-d", "children"),
-    Output("kpi-total-v", "children"),
-    Output("kpi-uniq-v", "children"),
-    Output("kpi-uniq-d", "children"),
-    Output("kpi-max-v", "children"),
-    Output("main-chart", "figure"),
-    Output("chart-card-title", "children"),
-    Output("chart-card-sub", "children"),
-    Output("chart-card-ic", "children"),
-    Output("dot-map", "figure"),
-    Output("apt-table-host", "children"),
-    Output("apt-table-sub", "children"),
-    Output("tb-total", "children"),
-    Output("tb-cur", "children"),
-    Output("tb-page", "data"),
-    Input("btn-apply", "n_clicks"),
-    Input("f-deal", "data"),
-    Input("active-tab", "data"),
-    Input("f-sido", "value"),
-    Input("f-sgg", "value"),
-    Input("f-dong", "value"),
-    Input("f-area", "value"),
-    Input("tb-sort", "data"),
-    Input("tb-first", "n_clicks"),
-    Input("tb-prev", "n_clicks"),
-    Input("tb-next", "n_clicks"),
-    Input("tb-last", "n_clicks"),
-    State("f-period", "value"),
-    State("tb-page", "data"),
-)
-def _refresh(
-    _apply, deal, tab, sido, sgg, dong, area, sort_state,
-    _first, _prev, _next, _last, period, page,
-):
-    import time
-
-    t0 = time.time()
-    f = _filter_from_state(sido, sgg, dong, area, deal, period)
-    print(f"[refresh] trigger={ctx.triggered_id} filter={f}", flush=True)
-
-    try:
-        t = time.time()
-        kpi = q.kpi_summary(f)
-        print(f"  kpi {time.time() - t:.2f}s", flush=True)
-        t = time.time()
-        complexes = q.top_complexes(f, limit=200)
-        print(f"  top_complexes {time.time() - t:.2f}s rows={len(complexes)}", flush=True)
-        t = time.time()
-        trend_df = q.trade_trend(f)
-        print(f"  trade_trend {time.time() - t:.2f}s rows={len(trend_df)}", flush=True)
-        t = time.time()
-        price_df = q.price_change(f) if tab == "price" else None
-        print(f"  price_change {time.time() - t:.2f}s", flush=True)
-    except Exception as e:
-        traceback.print_exc()
-        msg = f"DB 오류: {e}"
-        empty = charts.empty_fig(msg)
-        return (
-            _scope_text(f), "—",
-            "—", "—", "—", "—",
-            empty, "거래추이", "", _fa("chart-line"),
-            empty,
-            html.Div(msg, style={"padding": "20px", "color": "var(--neg)"}),
-            "—", "/ 1", "1", 1,
-        )
-
-    scope = _scope_text(f)
-    deal_label = DEAL_LABELS.get(f.deal, f.deal)
-    if f.period_months >= 120:
-        period_txt_flat = "전체"
-    elif f.period_months >= 12:
-        yrs = f.period_months / 12
-        period_txt_flat = (
-            f"{yrs:.0f}" if f.period_months % 12 == 0 else f"{yrs:.1f}"
-        ) + "년"
-    else:
-        period_txt_flat = f"{f.period_months}개월"
-
-    if tab == "price":
-        fig = charts.build_price_change(price_df if price_df is not None else trend_df)
-        title = "가격 변화"
-        sub = f"{scope} · 평균 vs 중앙값 · 월별"
-        ic = _fa("won-sign")
-    else:
-        fig = charts.build_trade_trend(trend_df, f.deal)
-        title = "거래추이"
-        sub = f"{scope} · {deal_label} · {f.area} · 일별"
-        ic = _fa("chart-line")
-
-    t = time.time()
-    dot_fig = charts.build_dot_map(complexes, f.sido)
-    print(f"  dot_map {time.time()-t:.2f}s | total {time.time()-t0:.2f}s", flush=True)
-
-    sort_state = sort_state or {"key": "count", "dir": -1}
-    sort_key = sort_state["key"]
-    sort_dir = sort_state["dir"]
-
-    current_page = int(page or 1)
-    trig_id = ctx.triggered_id
-    if trig_id == "tb-first":
-        current_page = 1
-    elif trig_id == "tb-prev":
-        current_page = max(1, current_page - 1)
-    elif trig_id == "tb-next":
-        current_page += 1
-    elif trig_id == "tb-last":
-        current_page = 10_000
-
-    if trig_id in (
-        "btn-apply", "f-deal", "active-tab",
-        "f-sido", "f-sgg", "f-dong", "f-area", "tb-sort",
-    ):
-        current_page = 1
-
-    table, total_pages, current_page = _render_apt_table(
-        complexes, sort_key, sort_dir, current_page
-    )
-
-    sub_line = ["총 ", html.B(f"{len(complexes):,}"), " 건 · ", scope]
-    scope_d = f"{deal_label} · {f.area} · {period_txt_flat}"
-
-    return (
-        scope, scope_d,
-        f"{kpi['total']:,}",
-        f"{kpi['uniq']:,}",
-        f"면적: {f.area}",
-        f"{kpi['max']:,}",
-        fig, title, sub, ic,
-        dot_fig,
-        table,
-        sub_line,
-        f"/ {total_pages}",
-        str(current_page),
-        current_page,
-    )
-
-
-# --- Choropleth is its own callback so the 700KB GeoJSON doesn't
-#     re-serialize on every filter change ---
-@callback(
-    Output("choropleth", "figure"),
-    Input("f-sido", "value"),
-    Input("f-sgg", "value"),
-    Input("f-deal", "data"),
-    Input("f-area", "value"),
-    Input("btn-apply", "n_clicks"),
-    State("f-period", "value"),
-)
-def _refresh_choropleth(sido, sgg, deal, area, _apply, period):
-    import time
-
-    t0 = time.time()
-    f = q.Filter(
-        sido=sido or "서울특별시",
-        sgg="전체",
-        dong="전체",
-        area=area or "전체",
-        deal=deal or "sale",
-        period_months=int(period or 36),
-    )
-    try:
-        sgg_df = q.sgg_counts(f)
-    except Exception:
-        traceback.print_exc()
-        return charts.empty_fig("DB 오류")
-    fig = charts.build_choropleth(
-        sgg_df, f.sido, selected_sgg=sgg if sgg and sgg != "전체" else None
-    )
-    print(f"[choropleth] {time.time()-t0:.2f}s sgg_rows={len(sgg_df)}", flush=True)
-    return fig
-
-
-# --- Sort header click → update sort store + reset page ---
-@callback(
-    Output("tb-sort", "data"),
-    Input({"role": "th", "col": ALL}, "n_clicks"),
-    State("tb-sort", "data"),
-    State({"role": "th", "col": ALL}, "id"),
+    Output("home-selected-sgg", "data", allow_duplicate=True),
+    Input("page-home-clear-sgg", "n_clicks"),
     prevent_initial_call=True,
 )
-def _sort_click(n_clicks, sort_state, ids):
-    if not ctx.triggered_id or not any(n_clicks or []):
+def _clear_selected_sgg(n):
+    if not n:
         raise PreventUpdate
-    col = ctx.triggered_id["col"]
-    sort_state = sort_state or {"key": "count", "dir": -1}
-    if sort_state["key"] == col:
-        sort_state = {"key": col, "dir": -sort_state["dir"]}
+    return None
+
+
+@callback(
+    Output("page-home-scope", "children"),
+    Output("kpi-home-trade-v", "children"),
+    Output("kpi-home-trade-p", "children"),
+    Output("kpi-home-trade-d", "children"),
+    Output("kpi-home-ppm2-v", "children"),
+    Output("kpi-home-ppm2-p", "children"),
+    Output("kpi-home-jeonse-v", "children"),
+    Output("kpi-home-jeonse-p", "children"),
+    Output("kpi-home-active-v", "children"),
+    Output("kpi-home-active-p", "children"),
+    Output("kpi-home-active-d", "children"),
+    Output(f"{_MAP_ID}-geojson", "hideout"),
+    Output("page-home-map-title", "children"),
+    Output("page-home-selected-chip", "children"),
+    Output("page-home-trend-title", "children"),
+    Output("page-home-trend", "figure"),
+    Input("f-sido", "value"),
+    Input("home-metric", "data"),
+    Input("home-selected-sgg", "data"),
+)
+def _refresh_home(sido, metric, selected_sgg):
+    sido = sido or "서울특별시"
+    metric = metric or "trade_count"
+    sgg = selected_sgg or None
+
+    scope_label = f"실시간 · {sido}" + (f" · {sgg}" if sgg else "")
+
+    # ---- KPI 1: 거래량 (직전 완료월, 매매/전세/월세 분해) ----
+    trade_ym, trade = _trade_volume_breakdown(sido, sgg)
+    trade_v = format_count(trade["total"])
+    trade_p = f"{trade_ym} (직전 완료월)"
+    trade_d = (
+        f"매매 {trade['sale']:,} · 전세 {trade['jeonse']:,} · 월세 {trade['rent']:,}"
+    )
+
+    # ---- KPI 2: 평당가 (최근 6M 중위) ----
+    ppm2_cur, ppm2_window = _ppm2_median_6m(sido, sgg)
+    ppm2_v = format_ppm2(ppm2_cur) if ppm2_cur is not None else "—"
+    ppm2_p = f"{ppm2_window} · 6M 중위"
+
+    # ---- KPI 3: 전세가율 (직전 완료월, 평당 기준) ----
+    j_cur, j_ym = _jeonse_ratio_1m(sido, sgg)
+    jeonse_v = format_percent(j_cur) if j_cur is not None else "—"
+    jeonse_p = f"{j_ym} (직전 완료월)"
+
+    # ---- KPI 4: 활성 매물 (현재 스냅샷 + 매매/전세/월세 분해) ----
+    snap = _active_listing_snapshot(sido, sgg)
+    if snap["total"] == 0:
+        active_v, active_d = "—", "—"
     else:
-        sort_state = {"key": col, "dir": -1}
-    return sort_state
+        active_v = format_count(snap["total"])
+        active_d = (
+            f"매매 {snap['sale']:,} · 전세 {snap['jeonse']:,} · 월세 {snap['rent']:,}"
+        )
+    active_p = "현재 스냅샷"
+
+    # ---- Map (KPI 와 동일한 기간/지표로 동기) ----
+    values = _metric_values(sido, metric)
+    values = collapse_db_sgg_to_geo(values, aggregator="mean")
+    tooltip_label = {
+        "trade_count": f"거래량 · {trade_ym}",
+        "ppm2": f"평당 중위 · {ppm2_window}",
+        "jeonse": f"전세가율 · {j_ym}",
+        "active": "활성 매물 · 현재",
+    }[metric]
+    map_hideout = build_hideout(
+        values,
+        color_scale=_METRIC_SCALE[metric],
+        selected_sgg=sgg,
+        sido=sido,
+        metric=metric,
+        metric_label=tooltip_label,
+        value_format=_METRIC_VALUE_FORMAT[metric],
+    )
+    map_title = f"수도권 시군구 — {_METRIC_LABELS[metric]}"
+
+    # ---- Selected chip ----
+    if sgg:
+        chip = html.Span(
+            className="filter-chip",
+            children=[
+                html.B(sgg),
+                " 필터 활성",
+                html.Button("×", id="page-home-clear-sgg", n_clicks=0, title="선택 해제"),
+            ],
+        )
+    else:
+        chip = None
+
+    # ---- Trend ----
+    trend_title = "36개월 거래량 · 평당가 추이" + (f" · {sgg}" if sgg else "")
+    trend_fig = _build_trend_chart(sido, sgg)
+
+    return (
+        scope_label,
+        trade_v, trade_p, trade_d,
+        ppm2_v, ppm2_p,
+        jeonse_v, jeonse_p,
+        active_v, active_p, active_d,
+        map_hideout, map_title, chip,
+        trend_title, trend_fig,
+    )

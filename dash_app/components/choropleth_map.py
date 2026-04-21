@@ -18,7 +18,7 @@ from dash import html
 
 from dash_app.db import load_metro_geojson
 
-ColorScale = Literal["Blues", "Oranges", "Greens", "Reds"]
+ColorScale = Literal["Blues", "Oranges", "Greens", "Reds", "Purples"]
 
 _COLOR_RAMPS: dict[ColorScale, list[str]] = {
     "Blues": [
@@ -36,6 +36,10 @@ _COLOR_RAMPS: dict[ColorScale, list[str]] = {
     "Reds": [
         "#fde7e4", "#fbc9c0", "#f7a391", "#ef7f6d",
         "#d9584a", "#b0352c", "#81211d", "#651918",
+    ],
+    "Purples": [
+        "#efdcff", "#dcb9ff", "#c597f3", "#ae74e1",
+        "#9755cd", "#7b3cb2", "#5e278d", "#401867",
     ],
 }
 
@@ -81,12 +85,27 @@ def build_hideout(
     color_scale: ColorScale = "Blues",
     selected_sgg: str | None = None,
     sido: str | None = None,
+    *,
+    metric: str | None = None,
+    metric_label: str | None = None,
+    value_format: str = "count",
 ) -> dict:
-    """choropleth hideout 페이로드. 콜백 Output 타깃."""
+    """choropleth hideout 페이로드. 콜백 Output 타깃.
+
+    Args:
+        values_by_sgg: 지표 원본값 (색상 계산 + 툴팁 표시용)
+        metric: 내부 지표 키 (`trade_count` | `ppm2` | `jeonse` | `active` 등)
+        metric_label: 툴팁에 표시할 사람 읽기용 이름 (예: "평당 중위 (6M)")
+        value_format: 툴팁 포매터 지시자 — `count` | `ppm2` | `percent`
+    """
     return {
         "color_by_sgg": compute_color_by_sgg(values_by_sgg, color_scale),
+        "value_by_sgg": {k: float(v) if v is not None else None for k, v in values_by_sgg.items()},
         "selected_sgg": selected_sgg,
         "sido_prefix": _SIDO_PREFIX.get(sido) if sido else None,
+        "metric": metric,
+        "metric_label": metric_label,
+        "value_format": value_format,
     }
 
 

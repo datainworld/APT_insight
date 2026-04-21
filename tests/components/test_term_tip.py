@@ -15,15 +15,21 @@ def test_glossary_has_core_terms() -> None:
         assert GLOSSARY[k]["short"]
 
 
-def test_term_tip_uses_short_as_label() -> None:
+def test_term_tip_uses_short_as_title() -> None:
+    """Native title 속성에 용어 정의가 들어가야 한다."""
     node = TermTip("평당가")
-    assert GLOSSARY["평당가"]["short"] in str(node.label)
+    assert node.title == GLOSSARY["평당가"]["short"]
 
 
 def test_term_tip_accepts_custom_display() -> None:
+    """display 인자가 실제 보이는 텍스트를 덮어써야 한다."""
     node = TermTip("호가", display="매물가")
-    # children is an html.Span — its child is the display text
-    assert node.children.children == "매물가"
+    assert node.children == "매물가"
+
+
+def test_term_tip_default_label_is_glossary_label() -> None:
+    node = TermTip("평당가")
+    assert node.children == GLOSSARY["평당가"]["label"]
 
 
 def test_term_tip_unknown_key_raises() -> None:
