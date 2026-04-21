@@ -7,6 +7,7 @@ from typing import Any, Literal
 import dash_ag_grid as dag
 
 RowModel = Literal["clientSide", "infinite", "serverSide"]
+RowSelection = Literal["single", "multiple"]
 
 
 DEFAULT_THEME = "ag-theme-alpine-dark"
@@ -21,6 +22,8 @@ def RankingTable(
     page_size: int = 25,
     height: int = 480,
     theme: str = DEFAULT_THEME,
+    row_selection: RowSelection | None = None,
+    get_row_id: str | None = None,
 ) -> dag.AgGrid:
     """재사용 가능한 ag-grid 테이블.
 
@@ -32,6 +35,8 @@ def RankingTable(
         page_size: 페이지네이션 크기
         height: 고정 픽셀 높이
         theme: ag-grid CSS 테마 클래스
+        row_selection: `"single"` / `"multiple"` — 행 선택 활성화
+        get_row_id: 행 클릭 안정성을 위한 JS 표현식 (예: `"params.data.apt_id"`)
     """
     grid_options: dict[str, Any] = {
         "pagination": True,
@@ -43,6 +48,9 @@ def RankingTable(
         "headerHeight": 36,
         "rowModelType": row_model,
     }
+    if row_selection:
+        grid_options["rowSelection"] = row_selection
+        grid_options["suppressRowClickSelection"] = False
 
     default_col_def = {
         "resizable": True,
@@ -52,6 +60,9 @@ def RankingTable(
         "minWidth": 80,
     }
 
+    kwargs: dict[str, Any] = {}
+    if get_row_id:
+        kwargs["getRowId"] = get_row_id
     return dag.AgGrid(
         id=f"{id_prefix}-grid",
         columnDefs=columns,
@@ -60,4 +71,5 @@ def RankingTable(
         dashGridOptions=grid_options,
         className=theme,
         style={"height": f"{height}px", "width": "100%"},
+        **kwargs,
     )

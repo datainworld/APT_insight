@@ -58,6 +58,24 @@ def get_complex_master(complex_no: str) -> dict | None:
     return dict(row) if row else None
 
 
+def listings_by_apt_id(apt_id: str) -> pd.DataFrame:
+    """complex_mapping 을 거쳐 rt apt_id → nv_listing 전체 매물 조회.
+
+    /complex 의 호가 추이 탭용. first_seen_date 부터 last_seen_date 까지 시간축 구성.
+    """
+    sql = text("""
+        SELECT l.article_no, l.trade_type, l.exclusive_area,
+               l.initial_price, l.current_price, l.rent_price,
+               l.first_seen_date, l.last_seen_date, l.is_active
+        FROM nv_listing l
+        JOIN complex_mapping m ON l.complex_no = m.naver_complex_no
+        WHERE m.apt_id = :apt_id
+        ORDER BY l.first_seen_date
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params={"apt_id": apt_id})
+
+
 def active_listing_counts_by_sgg(sido: str | None = None) -> pd.DataFrame:
     """시군구별 활성 매물 수 (KPI용)."""
     where = ["l.is_active = TRUE"]

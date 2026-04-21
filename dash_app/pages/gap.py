@@ -87,10 +87,13 @@ def _bottom_scatter() -> html.Div:
                 className="card-head",
                 children=[
                     html.Div(className="ic", children=html.I(className="fa-solid fa-chart-scatter")),
-                    html.Div(className="t", children="실거래 중위값 vs 호가 평균"),
+                    html.Div(className="t", children="실거래 평당 중위 vs 호가 평당 평균"),
                     html.Div(
                         className="s",
-                        children="x = 실거래 중위 · y = 호가 평균 · 점 크기 = 거래 6M · 색 = 괴리율",
+                        children=(
+                            "x = 실거래 평당가 중위 · y = 호가 평당가 평균 · "
+                            "점 크기 = 거래 6M · 색 = 괴리율 (다면적 정규화)"
+                        ),
                     ),
                 ],
             ),
@@ -163,8 +166,8 @@ def _build_scatter(df: pd.DataFrame) -> go.Figure:
     sizes = (df["trade_count"].fillna(1).clip(lower=1) ** 0.5) * 3 + 5
     fig = go.Figure(
         go.Scatter(
-            x=df["median_deal"],
-            y=df["avg_ask"],
+            x=df["median_trade_ppm2"],
+            y=df["avg_ask_ppm2"],
             mode="markers",
             marker=dict(
                 size=sizes,
@@ -178,21 +181,22 @@ def _build_scatter(df: pd.DataFrame) -> go.Figure:
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
                 "%{customdata[1]} · 거래 %{customdata[2]}건<br>"
-                "중위 실거래 %{x:,.0f}만원 · 호가 평균 %{y:,.0f}만원<br>"
+                "실거래 평당 중위 %{x:,.0f}만원/㎡ · "
+                "호가 평당 평균 %{y:,.0f}만원/㎡<br>"
                 "괴리 %{marker.color:.1f}%<extra></extra>"
             ),
         )
     )
-    # y=x 대각선 보조
-    lo = float(min(df["median_deal"].min(), df["avg_ask"].min()))
-    hi = float(max(df["median_deal"].max(), df["avg_ask"].max()))
+    # y=x 대각선 보조 (호가=실거래 평당가일 때)
+    lo = float(min(df["median_trade_ppm2"].min(), df["avg_ask_ppm2"].min()))
+    hi = float(max(df["median_trade_ppm2"].max(), df["avg_ask_ppm2"].max()))
     fig.add_shape(
         type="line", x0=lo, y0=lo, x1=hi, y1=hi,
         line=dict(color="rgba(255,255,255,.25)", width=1, dash="dot"),
     )
     apply_dark_theme(fig, margin=dict(l=56, r=16, t=10, b=40))
-    fig.update_xaxes(title=dict(text="실거래 중위 (만원)", font=dict(size=10)))
-    fig.update_yaxes(title=dict(text="호가 평균 (만원)", font=dict(size=10)))
+    fig.update_xaxes(title=dict(text="실거래 평당 중위 (만원/㎡)", font=dict(size=10)))
+    fig.update_yaxes(title=dict(text="호가 평당 평균 (만원/㎡)", font=dict(size=10)))
     return fig
 
 
@@ -271,8 +275,8 @@ def _refresh_gap(sido, sgg):
         cplx_df = pd.DataFrame(
             columns=[
                 "apt_id", "apt_name", "sido", "sgg", "latitude", "longitude", "build_year",
-                "median_deal", "avg_ask", "trade_count", "active_count", "avg_days_listed",
-                "gap_ratio",
+                "median_trade_ppm2", "avg_ask_ppm2", "trade_count", "active_count",
+                "avg_days_listed", "gap_ratio",
             ]
         )
 

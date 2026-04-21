@@ -276,3 +276,105 @@ def last_refresh_timestamp() -> date | None:
     with get_engine().connect() as conn:
         row = conn.execute(text("SELECT MAX(deal_date) FROM rt_trade")).scalar()
     return row
+
+
+# ---------------------------------------------------------------------------
+# 단지 상세 — /complex 페이지
+# ---------------------------------------------------------------------------
+
+
+def search_complexes(query: str, limit: int = 20) -> list[dict]:
+    """단지명 부분일치 검색. Dropdown 서버사이드 options 용."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    sql = text("""
+        SELECT c.apt_id,
+               c.apt_name,
+               c.sido_name,
+               c.sgg_name,
+               c.admin_dong,
+               m.trade_count_6m,
+               m.trade_count_36m
+        FROM rt_complex c
+        LEFT JOIN mv_metrics_by_complex m ON c.apt_id = m.apt_id
+        WHERE c.apt_name ILIKE :pattern
+        ORDER BY COALESCE(m.trade_count_36m, 0) DESC, c.apt_name
+        LIMIT :lim
+    """)
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            sql, {"pattern": f"%{q}%", "lim": int(limit)}
+        ).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_rt_complex_master(apt_id: str) -> dict | None:
+    """단지 기본 정보 (rt_complex + MV summary + 주력 면적).
+
+    `primary_area_m2` 는 최근 12개월 거래가 가장 많은 전용면적. 단지 내 다면적 혼재로
+    단일 평균가는 왜곡되므로, "주력 면적 기준" 의 해석을 돕기 위해 제공.
+    """
+    sql = text("""
+        SELECT c.apt_id, c.apt_name, c.build_year,
+               c.road_address, c.jibun_address,
+               c.sido_name, c.sgg_name, c.admin_dong,
+               c.latitude, c.longitude,
+               m.trade_count_3m, m.trade_count_6m, m.trade_count_12m, m.trade_count_36m,
+               m.avg_price_6m, m.median_ppm2_6m, m.last_deal_date,
+               (
+                   SELECT exclusive_area FROM rt_trade
+                   WHERE apt_id = :apt_id
+                     AND deal_date >= CURRENT_DATE - INTERVAL '12 months'
+                     AND exclusive_area > 0
+                   GROUP BY exclusive_area
+                   ORDER BY COUNT(*) DESC, exclusive_area
+                   LIMIT 1
+               ) AS primary_area_m2
+        FROM rt_complex c
+        LEFT JOIN mv_metrics_by_complex m ON c.apt_id = m.apt_id
+        WHERE c.apt_id = :apt_id
+    """)
+    with get_engine().connect() as conn:
+        row = conn.execute(sql, {"apt_id": apt_id}).mappings().fetchone()
+    return dict(row) if row else None
+
+
+def trades_by_complex(apt_id: str, months: int = 36) -> pd.DataFrame:
+    """단일 단지의 매매 실거래 리스트."""
+    sql = text(f"""
+        SELECT deal_date, deal_amount, exclusive_area, floor, dealing_type
+        FROM rt_trade
+        WHERE apt_id = :apt_id
+          AND deal_date >= CURRENT_DATE - INTERVAL '{int(months)} months'
+        ORDER BY deal_date
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params={"apt_id": apt_id})
+
+
+def rents_by_complex(apt_id: str, months: int = 36) -> pd.DataFrame:
+    """단일 단지의 전월세 실거래 리스트."""
+    sql = text(f"""
+        SELECT deal_date, deposit, monthly_rent, exclusive_area, floor,
+               CASE WHEN monthly_rent = 0 THEN 'jeonse' ELSE 'rent' END AS rent_type
+        FROM rt_rent
+        WHERE apt_id = :apt_id
+          AND deal_date >= CURRENT_DATE - INTERVAL '{int(months)} months'
+        ORDER BY deal_date
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params={"apt_id": apt_id})
+
+
+def recent_trades(apt_id: str, limit: int = 5) -> pd.DataFrame:
+    """우측 패널 `최근 거래 N건` 용."""
+    sql = text("""
+        SELECT deal_date, deal_amount, exclusive_area, floor
+        FROM rt_trade
+        WHERE apt_id = :apt_id
+        ORDER BY deal_date DESC
+        LIMIT :lim
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params={"apt_id": apt_id, "lim": int(limit)})

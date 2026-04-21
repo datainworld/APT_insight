@@ -1,6 +1,12 @@
 """호가 괴리 (gap) 관련 쿼리 — /gap 페이지용.
 
-괴리율 = (호가 평균 - 실거래 중위값) / 실거래 중위값
+**설계 원칙 — 평당가 기준 비교**
+아파트는 단지 내 다양한 면적대(전용면적)이 혼재하며, 거래가/호가는 면적에 종속된다.
+따라서 단지의 "평균 매매가" 나 "호가 평균" 을 면적 고려 없이 비교하면 왜곡된다.
+이 모듈의 모든 집계는 `price / exclusive_area` 를 먼저 계산한 뒤(평당가), 그 분포의
+중위/평균을 취한다.
+
+괴리율 = (호가 평당 평균 - 실거래 평당 중위) / 실거래 평당 중위
 
 base 조회는 `complex_mapping` 에 연결된 단지만 대상으로 하며, 매핑이 없으면
 해당 단지는 집계에서 제외된다. (스펙 3.4 cover_rate 배지가 이 한계를 사용자에게 노출)
@@ -17,7 +23,7 @@ _LOOKBACK_MONTHS = 6
 
 
 def _gap_cte_sql(*, include_complex_cols: bool) -> str:
-    """매핑된 단지별 (실거래 중위, 호가 평균, 거래량, 매물수) CTE SQL.
+    """매핑된 단지별 (실거래 평당 중위, 호가 평당 평균, 거래량, 매물수) CTE SQL.
 
     include_complex_cols=True 면 apt_id + apt_name + lat/lon 컬럼을 투영.
     False 면 sido/sgg 만 투영하여 상위 집계에 위임.
@@ -32,36 +38,43 @@ def _gap_cte_sql(*, include_complex_cols: bool) -> str:
             {projection}
             c.sido_name AS sido,
             c.sgg_name  AS sgg,
-            trade_stats.median_deal,
+            trade_stats.median_trade_ppm2,
             trade_stats.trade_count,
-            ask_stats.avg_ask,
+            ask_stats.avg_ask_ppm2,
             ask_stats.active_count,
             ask_stats.avg_days_listed
         FROM rt_complex c
         JOIN complex_mapping m ON c.apt_id = m.apt_id
         JOIN (
             SELECT apt_id,
-                   PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY deal_amount) AS median_deal,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY deal_amount / NULLIF(exclusive_area, 0)
+                   ) AS median_trade_ppm2,
                    COUNT(*) AS trade_count
             FROM rt_trade
             WHERE deal_date >= CURRENT_DATE - INTERVAL '{_LOOKBACK_MONTHS} months'
+              AND exclusive_area > 0
             GROUP BY apt_id
         ) trade_stats ON c.apt_id = trade_stats.apt_id
         JOIN (
             SELECT complex_no,
-                   AVG(current_price) AS avg_ask,
-                   COUNT(*)            AS active_count,
-                   AVG((CURRENT_DATE - first_seen_date)::int) AS avg_days_listed
+                   AVG(current_price / NULLIF(exclusive_area, 0)) AS avg_ask_ppm2,
+                   COUNT(*)                                         AS active_count,
+                   AVG((CURRENT_DATE - first_seen_date)::int)       AS avg_days_listed
             FROM nv_listing
-            WHERE is_active = TRUE AND trade_type = 'A1' AND current_price IS NOT NULL
+            WHERE is_active = TRUE
+              AND trade_type = 'A1'
+              AND current_price IS NOT NULL
+              AND exclusive_area > 0
             GROUP BY complex_no
         ) ask_stats ON m.naver_complex_no = ask_stats.complex_no
-        WHERE c.sgg_name IS NOT NULL AND trade_stats.median_deal > 0
+        WHERE c.sgg_name IS NOT NULL
+          AND trade_stats.median_trade_ppm2 > 0
     """
 
 
 def gap_ratio_by_sgg(sido: str | None = None) -> pd.DataFrame:
-    """시군구별 평균 호가 괴리율 + 의심 단지 수 + 평균 노출기간."""
+    """시군구별 평균 호가 괴리율 + 의심 단지 수 + 평균 노출기간. 전부 평당 기준."""
     inner = _gap_cte_sql(include_complex_cols=False)
     where = ""
     params: dict = {}
@@ -74,9 +87,12 @@ def gap_ratio_by_sgg(sido: str | None = None) -> pd.DataFrame:
         )
         SELECT sido, sgg,
                COUNT(*) AS mapped_count,
-               AVG((avg_ask - median_deal) / NULLIF(median_deal, 0)) AS avg_gap_ratio,
+               AVG(
+                   (avg_ask_ppm2 - median_trade_ppm2) / NULLIF(median_trade_ppm2, 0)
+               ) AS avg_gap_ratio,
                COUNT(*) FILTER (
-                   WHERE (avg_ask - median_deal) / NULLIF(median_deal, 0) > 0.10
+                   WHERE (avg_ask_ppm2 - median_trade_ppm2)
+                         / NULLIF(median_trade_ppm2, 0) > 0.10
                ) AS suspect_count,
                AVG(avg_days_listed) AS avg_days_listed
         FROM per_complex
@@ -93,7 +109,7 @@ def gap_ratio_by_complex(
     sgg: str | None = None,
     limit: int = 500,
 ) -> pd.DataFrame:
-    """단지별 호가 괴리 상세 — TOP N / scatter / KPI 집계에 공통 사용."""
+    """단지별 호가 괴리 상세 — TOP N / scatter / KPI 집계에 공통 사용. 전부 평당 기준."""
     inner = _gap_cte_sql(include_complex_cols=True)
     wheres = []
     params: dict = {"lim": int(limit)}
@@ -110,8 +126,9 @@ def gap_ratio_by_complex(
             {inner}
         )
         SELECT apt_id, apt_name, sido, sgg, latitude, longitude, build_year,
-               median_deal, avg_ask, trade_count, active_count, avg_days_listed,
-               (avg_ask - median_deal) / NULLIF(median_deal, 0) AS gap_ratio
+               median_trade_ppm2, avg_ask_ppm2, trade_count, active_count, avg_days_listed,
+               (avg_ask_ppm2 - median_trade_ppm2)
+                   / NULLIF(median_trade_ppm2, 0) AS gap_ratio
         FROM per_complex
         {where_clause}
         ORDER BY gap_ratio DESC NULLS LAST

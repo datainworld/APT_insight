@@ -7,7 +7,11 @@
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1); }
 
-.fd-shell { display: grid; grid-template-columns: 260px 1fr; height: 100vh; background: var(--bg-1); }
+.fd-shell { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 100vh; height: 100vh; background: var(--bg-1); }
+
+/* dash.page_container 가 그리드 셀로 들어가면서 height/overflow 가 없어 내부 .fd-main 이 스크롤되지 않음.
+   page_container 자체를 스크롤 컨테이너로 만든다. */
+#_pages_content { height: 100%; min-height: 0; overflow-y: auto; }
 
 /* ---------- FILTER SIDEBAR ---------- */
 .filter-side { background: var(--bg-2); border-right: 1px solid var(--border-1); padding: 20px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }

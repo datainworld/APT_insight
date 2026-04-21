@@ -46,8 +46,7 @@ _TABLE_COLUMNS: list[dict] = [
     {"field": "build_year", "headerName": "건축년도", "minWidth": 100, "type": "numericColumn"},
     {"field": "trade_count_6m", "headerName": "거래 6M", "minWidth": 100, "type": "numericColumn"},
     {"field": "trade_count_36m", "headerName": "거래 36M", "minWidth": 110, "type": "numericColumn"},
-    {"field": "avg_price_6m", "headerName": "평균가(만원)", "minWidth": 130, "type": "numericColumn",
-     "valueFormatter": {"function": "params.value == null ? '—' : d3.format(',.0f')(params.value)"}},
+    # 단지 평균가는 다면적 혼재로 의미 없어 제거. 평당가(만원/㎡)로 면적 정규화 비교.
     {"field": "median_ppm2_6m", "headerName": "평당가(만원/㎡)", "minWidth": 140,
      "type": "numericColumn",
      "valueFormatter": {"function": "params.value == null ? '—' : d3.format(',.0f')(params.value)"}},

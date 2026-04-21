@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
 
 from dash_app.components.choropleth_map import ChoroplethMap, build_hideout
-from dash_app.components.formatters import format_percent, format_won
+from dash_app.components.formatters import format_percent, format_ppm2
 from dash_app.components.kpi_card import KpiCard
 from dash_app.components.ranking_table import RankingTable
 from dash_app.geo_names import collapse_db_sgg_to_geo
@@ -29,6 +29,7 @@ dash.register_page(
 
 
 _MAP_ID = "page-invest-map"
+# 주의: 단지 내 다면적 혼재로 "단지 평균가" 는 왜곡됨 → 전부 평당가(만원/㎡) 기준.
 _TABLE_COLUMNS: list[dict] = [
     {"field": "apt_name", "headerName": "단지", "minWidth": 180,
      "cellRenderer": "markdown",
@@ -36,11 +37,11 @@ _TABLE_COLUMNS: list[dict] = [
     {"field": "sgg", "headerName": "자치구", "minWidth": 100},
     {"field": "jeonse_ratio", "headerName": "전세가율", "minWidth": 110, "type": "numericColumn",
      "valueFormatter": {"function": "params.value == null ? '—' : (params.value * 100).toFixed(1) + '%'"}},
-    {"field": "gap", "headerName": "갭(만원)", "minWidth": 120, "type": "numericColumn",
+    {"field": "gap_ppm2", "headerName": "갭 (만원/㎡)", "minWidth": 120, "type": "numericColumn",
      "valueFormatter": {"function": "params.value == null ? '—' : d3.format(',.0f')(params.value)"}},
-    {"field": "median_sale", "headerName": "매매 중위", "minWidth": 120, "type": "numericColumn",
+    {"field": "median_sale_ppm2", "headerName": "매매 평당 (만원/㎡)", "minWidth": 150, "type": "numericColumn",
      "valueFormatter": {"function": "params.value == null ? '—' : d3.format(',.0f')(params.value)"}},
-    {"field": "median_jeonse", "headerName": "전세 중위", "minWidth": 120, "type": "numericColumn",
+    {"field": "median_jeonse_ppm2", "headerName": "전세 평당 (만원/㎡)", "minWidth": 150, "type": "numericColumn",
      "valueFormatter": {"function": "params.value == null ? '—' : d3.format(',.0f')(params.value)"}},
     {"field": "sale_count", "headerName": "거래 6M", "minWidth": 100, "type": "numericColumn"},
     {"field": "attractiveness_score", "headerName": "매력도 점수", "minWidth": 120,
@@ -70,7 +71,7 @@ def _kpi_strip() -> html.Div:
         className="kpi-strip",
         children=[
             KpiCard("전세가율", value_id="kpi-invest-jeonse-v", term="전세가율"),
-            KpiCard("중위 갭", value_id="kpi-invest-gap-v", term="갭"),
+            KpiCard("중위 갭 (평당)", value_id="kpi-invest-gap-v", term="갭"),
             KpiCard("전월세전환율", value_id="kpi-invest-conv-v", term="전월세전환율"),
             KpiCard("매력도 상위 10% 컷오프", value_id="kpi-invest-cutoff-v", term="갭투자_점수"),
         ],
@@ -85,8 +86,11 @@ def _right_panel() -> html.Div:
                 className="card-head",
                 children=[
                     html.Div(className="ic", children=html.I(className="fa-solid fa-chart-column")),
-                    html.Div(className="t", children="갭 분포"),
-                    html.Div(className="s", children="히스토그램 · 만원"),
+                    html.Div(className="t", children="갭 분포 (평당)"),
+                    html.Div(
+                        className="s",
+                        children="히스토그램 · 만원/㎡ (다면적 정규화)",
+                    ),
                 ],
             ),
             dcc.Graph(
@@ -143,23 +147,23 @@ layout = html.Main(
 
 def _build_gap_hist(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    if df.empty or df["gap"].isna().all():
+    if df.empty or df["gap_ppm2"].isna().all():
         fig.add_annotation(
             text="데이터 없음", showarrow=False, font=dict(color="#777"),
             xref="paper", yref="paper", x=0.5, y=0.5,
         )
         return apply_dark_theme(fig, margin=dict(l=10, r=10, t=10, b=10))
-    gaps = df["gap"].dropna()
+    gaps = df["gap_ppm2"].dropna()
     fig.add_trace(
         go.Histogram(
             x=gaps,
             nbinsx=40,
             marker=dict(color=ACCENT_2, line=dict(color="#0c2630", width=0.5)),
-            hovertemplate="구간 %{x:,.0f}만원<br>%{y}개<extra></extra>",
+            hovertemplate="구간 %{x:,.0f}만원/㎡<br>%{y}개<extra></extra>",
         )
     )
     apply_dark_theme(fig, margin=dict(l=48, r=16, t=10, b=40))
-    fig.update_xaxes(title=dict(text="갭 (만원)", font=dict(size=10)))
+    fig.update_xaxes(title=dict(text="갭 (만원/㎡)", font=dict(size=10)))
     fig.update_yaxes(title=dict(text="단지 수", font=dict(size=10)))
     fig.update_layout(showlegend=False)
     return fig
@@ -190,14 +194,14 @@ def _refresh_invest(sido, sgg):
         sgg_df = iq.invest_by_sgg(sido)
     except Exception:
         sgg_df = pd.DataFrame(columns=[
-            "sido", "sgg", "complex_count", "jeonse_ratio", "median_gap", "conversion_rate",
+            "sido", "sgg", "complex_count", "jeonse_ratio", "median_gap_ppm2", "conversion_rate",
         ])
 
     if sgg and sgg != "전체":
         row = sgg_df.loc[sgg_df["sgg"] == sgg]
         if not row.empty:
             jeonse_v = format_percent(row["jeonse_ratio"].iloc[0])
-            gap_v = format_won(row["median_gap"].iloc[0])
+            gap_v = format_ppm2(row["median_gap_ppm2"].iloc[0])
             conv_v = format_percent(row["conversion_rate"].iloc[0])
         else:
             jeonse_v = gap_v = conv_v = "—"
@@ -205,7 +209,7 @@ def _refresh_invest(sido, sgg):
         jeonse_v = gap_v = conv_v = "—"
     else:
         jeonse_v = format_percent(sgg_df["jeonse_ratio"].mean())
-        gap_v = format_won(sgg_df["median_gap"].median())
+        gap_v = format_ppm2(sgg_df["median_gap_ppm2"].median())
         conv_v = format_percent(sgg_df["conversion_rate"].mean())
 
     # ---- map (전세가율 choropleth) ----
@@ -231,8 +235,8 @@ def _refresh_invest(sido, sgg):
         )
     except Exception:
         cplx_df = pd.DataFrame(columns=[
-            "apt_id", "apt_name", "sido", "sgg", "median_sale", "median_jeonse",
-            "sale_count", "jeonse_count", "gap", "jeonse_ratio", "attractiveness_score",
+            "apt_id", "apt_name", "sido", "sgg", "median_sale_ppm2", "median_jeonse_ppm2",
+            "sale_count", "jeonse_count", "gap_ppm2", "jeonse_ratio", "attractiveness_score",
         ])
 
     if cplx_df.empty or cplx_df["attractiveness_score"].isna().all():
