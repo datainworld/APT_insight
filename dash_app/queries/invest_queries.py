@@ -159,3 +159,63 @@ def invest_by_complex(
     """)
     with get_engine().connect() as conn:
         return pd.read_sql(sql, conn, params=params)
+
+
+def jeonse_ratio_monthly(sido: str | None = None, sgg: str | None = None) -> pd.DataFrame:
+    """월별 매매 단위면적 중위 + 전세 보증금 단위면적 중위 → 전세가율 (36개월).
+
+    반환 컬럼: ym, median_sale_ppm2, median_jeonse_ppm2, jeonse_ratio,
+             sale_count, jeonse_count
+    """
+    sale_filter = ["t.deal_date >= CURRENT_DATE - INTERVAL '36 months'",
+                   "t.exclusive_area > 0"]
+    jeonse_filter = ["r.deal_date >= CURRENT_DATE - INTERVAL '36 months'",
+                     "r.monthly_rent = 0",
+                     "r.exclusive_area > 0"]
+    common = ["c.sgg_name IS NOT NULL"]
+    params: dict = {}
+    if sido and sido != "전체":
+        common.append("c.sido_name = :sido")
+        params["sido"] = sido
+    if sgg and sgg != "전체":
+        common.append("c.sgg_name = :sgg")
+        params["sgg"] = sgg
+
+    sale_where = " AND ".join(sale_filter + common)
+    jeonse_where = " AND ".join(jeonse_filter + common)
+
+    sql = text(f"""
+        WITH monthly_sale AS (
+            SELECT DATE_TRUNC('month', t.deal_date)::date AS ym,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY t.deal_amount / NULLIF(t.exclusive_area, 0)
+                   ) AS median_sale_ppm2,
+                   COUNT(*) AS sale_count
+            FROM rt_trade t
+            JOIN rt_complex c ON c.apt_id = t.apt_id
+            WHERE {sale_where}
+            GROUP BY ym
+        ),
+        monthly_jeonse AS (
+            SELECT DATE_TRUNC('month', r.deal_date)::date AS ym,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY r.deposit / NULLIF(r.exclusive_area, 0)
+                   ) AS median_jeonse_ppm2,
+                   COUNT(*) AS jeonse_count
+            FROM rt_rent r
+            JOIN rt_complex c ON c.apt_id = r.apt_id
+            WHERE {jeonse_where}
+            GROUP BY ym
+        )
+        SELECT COALESCE(s.ym, j.ym) AS ym,
+               s.median_sale_ppm2,
+               j.median_jeonse_ppm2,
+               j.median_jeonse_ppm2 / NULLIF(s.median_sale_ppm2, 0) AS jeonse_ratio,
+               COALESCE(s.sale_count, 0)   AS sale_count,
+               COALESCE(j.jeonse_count, 0) AS jeonse_count
+        FROM monthly_sale s
+        FULL OUTER JOIN monthly_jeonse j ON j.ym = s.ym
+        ORDER BY ym
+    """)
+    with get_engine().connect() as conn:
+        return pd.read_sql(sql, conn, params=params)

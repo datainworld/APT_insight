@@ -1,4 +1,4 @@
-"""news_articles 조회 쿼리 — 홈 사이드 뉴스 + /insight 페이지용."""
+"""news_articles 조회 쿼리 — home 페이지 뉴스 카드용."""
 
 from __future__ import annotations
 
@@ -66,19 +66,3 @@ def fetch(
         return pd.read_sql(sql, conn, params=params)
 
 
-def get_status_counts(scope_days: int = 7) -> dict:
-    """/insight 상단 status banner 용 — `지역 N · 전국/정책 M · 추출 불가 K`."""
-    sql = text("""
-        SELECT scope, COUNT(*) AS n
-        FROM news_articles
-        WHERE published_at >= CURRENT_DATE - make_interval(days => :scope_days)
-          AND ad_filtered = FALSE
-        GROUP BY scope
-    """)
-    with get_engine().connect() as conn:
-        rows = conn.execute(sql, {"scope_days": int(scope_days)}).fetchall()
-    counts = {scope: 0 for scope in _ALLOWED_SCOPES}
-    for scope, n in rows:
-        if scope in counts:
-            counts[scope] = int(n)
-    return counts

@@ -38,7 +38,11 @@ def chat_components() -> list:
                 # minimized 상태에서 전체 섹션을 클릭 타겟으로 만드는 오버레이.
                 # compact+ 상태에서는 `pointer-events: none` 으로 비활성.
                 html.Button(
-                    [html.Span(className="pulse"), _fa("comment-dots")],
+                    [
+                        html.Span(className="pulse"),
+                        _fa("comment-dots"),
+                        html.Span("AI 채팅", className="chat-open-label"),
+                    ],
                     id="chat-open",
                     className="chat-open-btn",
                     n_clicks=0,

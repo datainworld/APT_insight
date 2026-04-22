@@ -37,10 +37,8 @@ DEFAULT_PERIOD_MONTHS = 36
 
 PAGES: list[PageDef] = [
     {"path": "/", "name": "시장 개요", "icon": "house", "order": 1},
-    {"path": "/region", "name": "지역 심층", "icon": "location-dot", "order": 2},
-    {"path": "/complex", "name": "단지 상세", "icon": "building", "order": 3},
-    {"path": "/gap", "name": "호가 괴리", "icon": "arrows-left-right", "order": 4},
-    {"path": "/invest", "name": "투자 지표", "icon": "chart-line", "order": 5},
-    {"path": "/insight", "name": "뉴스 & RAG", "icon": "newspaper", "order": 6},
-    {"path": "/about", "name": "소개", "icon": "circle-info", "order": 7},
+    {"path": "/complex", "name": "단지 상세", "icon": "building", "order": 2},
+    {"path": "/gap", "name": "실거래가 vs 호가", "icon": "arrows-left-right", "order": 3},
+    {"path": "/invest", "name": "투자 지표", "icon": "chart-line", "order": 4},
+    {"path": "/about", "name": "소개", "icon": "circle-info", "order": 5},
 ]

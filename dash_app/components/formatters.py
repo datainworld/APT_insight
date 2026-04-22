@@ -64,7 +64,7 @@ def format_percent(value: Any, *, digits: int = 1, as_ratio: bool = True) -> str
 
 
 def format_ppm2(value_manwon_per_m2: Any) -> str:
-    """평당가(만원/㎡) → `XX.X만원/㎡` 또는 `X.XX억/㎡`."""
+    """단위면적가(만원/㎡) → `XX.X만원/㎡` 또는 `X.XX억/㎡`."""
     if _is_nullish(value_manwon_per_m2):
         return _DASH
     v = float(value_manwon_per_m2)

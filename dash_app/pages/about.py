@@ -25,7 +25,7 @@ dash.register_page(
     __name__,
     path="/about",
     name="소개",
-    order=7,
+    order=5,
     title="APT Insight — 소개",
 )
 
@@ -60,12 +60,10 @@ def _section_hero() -> html.Section:
 
 
 _FEATURE_DESC = {
-    "/": "수도권 시군구 지표를 한눈에 — 거래량·평당가·전세가율·활성 매물",
-    "/region": "선택 시군구의 KPI · 단지 랭킹을 심층 분석",
+    "/": "수도권 시군구 지표를 한눈에 — 거래량·단위면적가·전세가율·활성 매물",
     "/complex": "개별 단지의 실거래·호가·전월세·층별 매트릭스",
-    "/gap": "호가 대비 실거래 괴리율로 시장 과열/저평가 단지 탐지",
+    "/gap": "실거래가 대비 호가 괴리율로 시장 과열/저평가 단지 탐지",
     "/invest": "전세가율 · 갭 · 전월세전환율 기반 갭투자 매력도 점수",
-    "/insight": "최신 부동산 뉴스 타임라인 + 업로드 PDF RAG 검색",
 }
 
 
@@ -129,8 +127,8 @@ def _section_data_sources() -> html.Section:
                     _stat("전월세 실거래", format_count(cov.get("rt_rent")), "rt_rent · 36M"),
                     _stat("네이버 활성 매물", format_count(cov.get("nv_active")), "nv_listing"),
                     _stat("단지 매핑", format_count(cov.get("mapping")), "complex_mapping"),
-                    _stat("뉴스 기사", format_count(cov.get("news")), "news_articles · 30d"),
-                    _stat("PDF 문서", format_count(pdf_n), "PGVector pdf_docs"),
+                    _stat("뉴스 기사", format_count(cov.get("news")), "news_articles (수집 7d)"),
+                    _stat("PDF 문서", format_count(pdf_n), "PGVector langchain_pg_embedding"),
                 ],
             ),
             html.Div(
@@ -250,7 +248,7 @@ def _section_chat() -> html.Section:
                         [html.Li(q) for q in CHIP_PROMPTS]
                         + [
                             html.Li("노원구에서 최근 전세 거래된 아파트 상위 10개"),
-                            html.Li("서울에서 평당가가 가장 높은 자치구 TOP 5"),
+                            html.Li("서울에서 단위면적가가 가장 높은 자치구 TOP 5"),
                             html.Li("분당구 재건축 관련 최근 뉴스 요약"),
                         ],
                         className="about-ul",

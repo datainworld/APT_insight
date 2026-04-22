@@ -25,21 +25,16 @@ from shared.config import NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
 from shared.db import get_engine
 
 _KST = timezone(timedelta(hours=9))
-_MAX_AGE_DAYS = 30
+_MAX_AGE_DAYS = 7
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-_QUERIES_MARKET = [
-    "수도권 아파트 매매", "서울 아파트 거래량", "경기도 아파트 시세",
-    "인천 아파트 매매", "수도권 분양", "서울 전세",
-]
-_QUERIES_POLICY = [
-    "부동산 대책", "재건축 규제", "주택 공급 정책", "전월세 법안",
-    "다주택자 세제", "부동산 세금",
-]
-_QUERIES_RATES = ["주택담보대출 금리", "부동산 대출 규제", "전세자금대출"]
+# 핵심 4개 키워드만 수집 — 시장 매매/거래 + 정책 + 금리.
+_QUERIES_MARKET = ["아파트 매매", "아파트 거래"]
+_QUERIES_POLICY = ["부동산 정책"]
+_QUERIES_RATES = ["주택담보대출"]
 
 _SIDO_NAMES = {"서울": "서울특별시", "서울특별시": "서울특별시",
                "경기": "경기도", "경기도": "경기도",
@@ -252,12 +247,16 @@ def collect(scrape_body: bool = True) -> dict:
                     result.skipped_stale += 1
                     continue
 
+                # 광고성 기사는 적재 자체를 건너뛴다.
+                if _is_ad_like(title, desc, raw_url):
+                    result.skipped_stale += 1  # stale 카운터에 합산
+                    continue
+
                 scope, sido, sgg = _detect_region(title, desc)
                 category = _classify_category(query, title, desc)
-                ad_flag = _is_ad_like(title, desc, raw_url)
 
                 body, publisher = ("", urlparse(raw_url).netloc.replace("www.", ""))
-                if scrape_body and not ad_flag:
+                if scrape_body:
                     body, publisher = _scrape(raw_url)
 
                 try:
@@ -274,7 +273,7 @@ def collect(scrape_body: bool = True) -> dict:
                             "sido_name": sido,
                             "sgg_name": sgg,
                             "category": category,
-                            "ad_filtered": ad_flag,
+                            "ad_filtered": False,
                         },
                     )
                 except Exception as e:

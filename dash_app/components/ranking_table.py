@@ -28,7 +28,7 @@ def RankingTable(
     """재사용 가능한 ag-grid 테이블.
 
     Args:
-        id_prefix: 컴포넌트 ID 접두어 (e.g. `page-region-ranking`)
+        id_prefix: 컴포넌트 ID 접두어 (e.g. `page-complex-picker`)
         columns: ag-grid columnDefs (field/headerName/valueFormatter 등)
         row_data: clientSide 모드일 때 초기 데이터. 서버사이드일 땐 None.
         row_model: `clientSide`(기본) / `infinite` / `serverSide`

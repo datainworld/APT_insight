@@ -49,7 +49,7 @@ def build_trade_trend(df: pd.DataFrame, deal_type: str) -> go.Figure:
     ))
     apply_dark_theme(fig, margin=dict(l=48, r=16, t=10, b=40))
     fig.update_layout(showlegend=False)
-    fig.update_xaxes(type="date", tickformat="%y-%m-%d")
+    fig.update_xaxes(type="date", tickformat="%Y-%m")
     fig.update_yaxes(title=dict(text="거래건수", font=dict(size=10)))
     return fig
 

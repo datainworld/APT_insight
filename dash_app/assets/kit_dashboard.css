@@ -14,7 +14,8 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 #_pages_content { height: 100%; min-height: 0; overflow-y: auto; }
 
 /* ---------- FILTER SIDEBAR ---------- */
-.filter-side { background: var(--bg-2); border-right: 1px solid var(--border-1); padding: 20px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.filter-side { background: var(--bg-2); border-right: 1px solid var(--border-1); padding: 20px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; scrollbar-width: none; -ms-overflow-style: none; }
+.filter-side::-webkit-scrollbar { display: none; }
 .filter-title { display:flex; align-items:center; gap:8px; color: var(--accent-1); font-weight: 700; font-size: var(--text-base); margin-bottom: 4px; }
 .filter-title .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent-1); display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:9px; }
 .filter-group label { font-size: var(--text-xs); color: var(--fg-2); text-transform: uppercase; letter-spacing: .4px; font-family: var(--font-mono); display:block; margin-bottom: 6px; font-weight: 600; }
@@ -263,11 +264,12 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
 /* 4단계 크기 (스펙 6.1) — 모두 bottom-right 기준 고정 */
 .chat-panel[data-size="minimized"] {
   right: 24px; bottom: 24px;
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  width: auto; height: 56px;
+  padding: 0 22px 0 18px;
+  border-radius: 999px;
+  background: #FF4D7E;
   border: none;
-  box-shadow: 0 10px 28px rgba(79,172,254,.5), 0 0 0 1px rgba(255,255,255,.08) inset;
+  box-shadow: 0 10px 28px rgba(255,77,126,.5), 0 0 0 1px rgba(255,255,255,.08) inset;
 }
 .chat-panel[data-size="compact"] {
   right: 24px; bottom: 24px;
@@ -293,23 +295,31 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
   display: none;
   border: none; background: transparent; color: #fff;
   width: 100%; height: 100%; cursor: pointer;
-  align-items: center; justify-content: center; font-size: 22px;
+  align-items: center; justify-content: center; gap: 10px; font-size: 20px;
   position: relative;
+  padding: 0;
 }
 .chat-panel[data-size="minimized"] .chat-open-btn { display: flex; }
+.chat-open-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  color: #ffffff;
+}
 .chat-panel[data-size="minimized"]:hover {
   transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 14px 34px rgba(79,172,254,.6);
+  box-shadow: 0 14px 34px rgba(255,77,126,.6);
 }
 .chat-open-btn .pulse {
   position: absolute; inset: 0; border-radius: inherit;
-  box-shadow: 0 0 0 0 rgba(79,172,254,.55);
+  box-shadow: 0 0 0 0 rgba(255,77,126,.55);
   animation: chatpulse 2.2s infinite; pointer-events: none;
 }
 @keyframes chatpulse {
-  0%   { box-shadow: 0 0 0 0 rgba(79,172,254,.5); }
-  70%  { box-shadow: 0 0 0 14px rgba(79,172,254,0); }
-  100% { box-shadow: 0 0 0 0 rgba(79,172,254,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(255,77,126,.5); }
+  70%  { box-shadow: 0 0 0 14px rgba(255,77,126,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,77,126,0); }
 }
 
 /* 반응형 — 작은 화면에서 compact/expanded 둘 다 거의 전체 */

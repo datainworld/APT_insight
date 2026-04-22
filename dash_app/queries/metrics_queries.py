@@ -75,20 +75,31 @@ def get_complex_ranking(
     where = ["1=1"]
     params: dict = {"lim": int(limit)}
     if sido and sido != "전체":
-        where.append("sido = :sido")
+        where.append("m.sido = :sido")
         params["sido"] = sido
     if sgg and sgg != "전체":
-        where.append("sgg = :sgg")
+        where.append("m.sgg = :sgg")
         params["sgg"] = sgg
 
     sql = text(f"""
-        SELECT apt_id, apt_name, sido, sgg, admin_dong, build_year,
-               latitude, longitude,
-               trade_count_3m, trade_count_6m, trade_count_12m, trade_count_36m,
-               avg_price_6m, median_ppm2_6m, last_deal_date
-        FROM mv_metrics_by_complex
+        SELECT m.apt_id, m.apt_name, m.sido, m.sgg, m.admin_dong, m.build_year,
+               m.latitude, m.longitude,
+               c.road_address,
+               (
+                   SELECT exclusive_area FROM rt_trade
+                   WHERE apt_id = m.apt_id
+                     AND deal_date >= CURRENT_DATE - INTERVAL '12 months'
+                     AND exclusive_area > 0
+                   GROUP BY exclusive_area
+                   ORDER BY COUNT(*) DESC, exclusive_area
+                   LIMIT 1
+               ) AS primary_area_m2,
+               m.trade_count_3m, m.trade_count_6m, m.trade_count_12m, m.trade_count_36m,
+               m.avg_price_6m, m.median_ppm2_6m, m.last_deal_date
+        FROM mv_metrics_by_complex m
+        LEFT JOIN rt_complex c ON c.apt_id = m.apt_id
         WHERE {' AND '.join(where)}
-        ORDER BY {order_by} DESC NULLS LAST
+        ORDER BY m.{order_by} DESC NULLS LAST
         LIMIT :lim
     """)
     with get_engine().connect() as conn:

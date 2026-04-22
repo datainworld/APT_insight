@@ -3,21 +3,24 @@
 구성:
 - KPI 4개 (각각 고유 색상, 클릭 시 맵 지표 전환):
     · 거래량 (직전 완료월 + MoM)
-    · 평당가 (최근 6M 중위 + 이전 6M 대비)
+    · 단위면적가 (최근 6M 중위 + 이전 6M 대비)
     · 전세가율 (최근 6M 평균 + 이전 6M 대비)
     · 활성 매물 (선행 지표, 매매/전세/월세 분해)
 - 메인 choropleth — 선택된 KPI 지표를 색상으로 반영
   · 시군구 클릭 → 페이지 내 필터 (KPI/trend 모두 그 시군구로 narrowing)
-- 36개월 거래량 · 평당가 dual-axis 라인 (맵 우측)
+- 36개월 거래량 · 단위면적가 dual-axis 라인 (맵 우측)
 
 설계 원칙:
-- 단지 내 다면적 혼재로 단지 평균가는 의미 없음 → 모든 가격 지표는 평당(만원/㎡) 기준.
+- 단지 내 다면적 혼재로 단지 평균가는 의미 없음 → 모든 가격 지표는 단위면적(만원/㎡) 기준.
 - 월 거래량 비교는 신고 유예(30일) 고려해 직전 완료월(2개월 전) vs 그 전월.
 - 6M 윈도우 지표는 최근 6M vs 이전 6M 비교.
 - 활성 매물은 스냅샷이라 시간 비교가 어려움 → 분해 표시로 대체.
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import dash
 import pandas as pd
@@ -32,6 +35,7 @@ from dash_app.components.kpi_card import KpiCard
 from dash_app.db import get_engine
 from dash_app.geo_names import collapse_db_sgg_to_geo
 from dash_app.queries import metrics_queries as mq
+from dash_app.queries import news_queries as newsq
 from dash_app.queries import nv_queries as nvq
 from dash_app.theme import ACCENT_2, apply_dark_theme
 
@@ -47,7 +51,7 @@ dash.register_page(
 _MAP_ID = "page-home-map"
 _METRIC_LABELS = {
     "trade_count": "거래량",
-    "ppm2": "평당가",
+    "ppm2": "단위면적가",
     "jeonse": "전세가율",
     "active": "활성 매물",
 }
@@ -85,7 +89,7 @@ def _page_head() -> html.Div:
     return html.Div(
         className="page-head",
         children=[
-            html.H1("부동산 거래 분석 대시보드"),
+            html.H1("시장 개요"),
             html.Div(
                 className="live",
                 children=[
@@ -112,10 +116,10 @@ def _kpi_strip() -> html.Div:
                 selected=True,
             ),
             KpiCard(
-                "평당가",
+                "단위면적가",
                 value_id="kpi-home-ppm2-v",
                 period_id="kpi-home-ppm2-p",
-                term="평당가",
+                term="단위면적가",
                 tile_id=_tile_id("ppm2"),
                 color="purple",
                 clickable=True,
@@ -171,6 +175,36 @@ def _map_card() -> html.Div:
     )
 
 
+def _news_card() -> html.Div:
+    return html.Div(
+        className="card",
+        children=[
+            html.Div(
+                className="card-head",
+                children=[
+                    html.Div(className="ic", children=html.I(className="fa-solid fa-newspaper")),
+                    html.Div(className="t", children="최근 7일 부동산 뉴스"),
+                    html.Div(
+                        className="s",
+                        children="아파트 매매·거래 / 부동산 정책 / 주택담보대출 키워드 · 시간순 10건",
+                        style={
+                            "color": "var(--fg-1)",
+                            "background": "rgba(79,172,254,.10)",
+                            "padding": "4px 10px",
+                            "borderRadius": "999px",
+                            "border": "1px solid rgba(79,172,254,.25)",
+                        },
+                    ),
+                ],
+            ),
+            html.Div(
+                id="page-home-news",
+                style={"padding": "4px 2px"},
+            ),
+        ],
+    )
+
+
 def _trend_card() -> html.Div:
     return html.Div(
         className="card",
@@ -182,9 +216,9 @@ def _trend_card() -> html.Div:
                     html.Div(
                         className="t",
                         id="page-home-trend-title",
-                        children="36개월 거래량 · 평당가 추이",
+                        children="36개월 거래량 · 단위면적가 추이",
                     ),
-                    html.Div(className="s", children="좌축 거래건수 · 우축 평당 중위 (만원/㎡)"),
+                    html.Div(className="s", children="좌축 거래건수 · 우축 단위면적 중위 (만원/㎡)"),
                 ],
             ),
             dcc.Graph(
@@ -196,15 +230,35 @@ def _trend_card() -> html.Div:
     )
 
 
+def _intent_caption() -> html.Div:
+    return html.Div(
+        style={
+            "color": "var(--fg-1)",
+            "fontSize": 12,
+            "padding": "10px 12px",
+            "lineHeight": 1.6,
+            "background": "rgba(79,172,254,.08)",
+            "borderLeft": "3px solid var(--accent-1)",
+            "borderRadius": "4px",
+        },
+        children=(
+            "KPI 카드를 클릭하면 맵의 표시 지표가 전환되고, 맵에서 자치구를 클릭하면 "
+            "모든 카드가 해당 자치구로 좁혀집니다. 사이드바의 시도/자치구 필터로도 동일하게 좁힐 수 있습니다."
+        ),
+    )
+
+
 layout = html.Main(
     className="fd-main",
     children=[
         _page_head(),
+        _intent_caption(),
         _kpi_strip(),
         html.Div(
             className="row2-28",
             children=[_map_card(), _trend_card()],
         ),
+        _news_card(),
     ],
 )
 
@@ -475,19 +529,20 @@ def _build_trend_chart(sido: str, sgg: str | None) -> go.Figure:
     )
     fig.add_trace(
         go.Scatter(
-            x=df["ym"], y=df["median_ppm2"], name="평당 중위",
+            x=df["ym"], y=df["median_ppm2"], name="단위면적 중위",
             mode="lines+markers",
             line=dict(color=ACCENT_2, width=2, shape="spline"),
             marker=dict(size=4),
-            hovertemplate="%{x}<br>평당 중위 %{y:,.0f}만원/㎡<extra></extra>",
+            hovertemplate="%{x}<br>단위면적 중위 %{y:,.0f}만원/㎡<extra></extra>",
             yaxis="y2",
         )
     )
     apply_dark_theme(fig, margin=dict(l=56, r=56, t=24, b=40))
+    fig.update_xaxes(type="date", tickformat="%Y-%m")
     fig.update_layout(
         yaxis=dict(title=dict(text="거래건수", font=dict(size=10))),
         yaxis2=dict(
-            title=dict(text="평당 중위 (만원/㎡)", font=dict(size=10)),
+            title=dict(text="단위면적 중위 (만원/㎡)", font=dict(size=10)),
             overlaying="y", side="right", showgrid=False,
         ),
         legend=dict(orientation="h", x=0, y=1.08, font=dict(size=11)),
@@ -623,7 +678,7 @@ def _refresh_home(sido, metric, selected_sgg):
     values = collapse_db_sgg_to_geo(values, aggregator="mean")
     tooltip_label = {
         "trade_count": f"거래량 · {trade_ym}",
-        "ppm2": f"평당 중위 · {ppm2_window}",
+        "ppm2": f"단위면적 중위 · {ppm2_window}",
         "jeonse": f"전세가율 · {j_ym}",
         "active": "활성 매물 · 현재",
     }[metric]
@@ -652,7 +707,7 @@ def _refresh_home(sido, metric, selected_sgg):
         chip = None
 
     # ---- Trend ----
-    trend_title = "36개월 거래량 · 평당가 추이" + (f" · {sgg}" if sgg else "")
+    trend_title = "36개월 거래량 · 단위면적가 추이" + (f" · {sgg}" if sgg else "")
     trend_fig = _build_trend_chart(sido, sgg)
 
     return (
@@ -664,3 +719,93 @@ def _refresh_home(sido, metric, selected_sgg):
         map_hideout, map_title, chip,
         trend_title, trend_fig,
     )
+
+
+# ---------------------------------------------------------------------------
+# 뉴스 카드 (수집된 7일치 news_articles)
+# ---------------------------------------------------------------------------
+
+_KST = timezone(timedelta(hours=9))
+
+
+def _format_relative_time(dt: Any) -> str:
+    if dt is None or pd.isna(dt):
+        return "—"
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            return str(dt)
+    if isinstance(dt, pd.Timestamp):
+        dt = dt.to_pydatetime()
+    now = datetime.now(_KST)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_KST)
+    delta = now - dt
+    if delta.days >= 1:
+        return f"{delta.days}일 전"
+    hours = delta.seconds // 3600
+    if hours >= 1:
+        return f"{hours}시간 전"
+    minutes = (delta.seconds // 60) or 1
+    return f"{minutes}분 전"
+
+
+def _render_news_item(row: dict) -> html.A:
+    desc = (row.get("description") or "").strip()
+    if len(desc) > 180:
+        desc = desc[:180].rstrip() + "…"
+    return html.A(
+        href=row.get("url", "#"),
+        target="_blank",
+        style={"textDecoration": "none", "color": "inherit"},
+        children=html.Div(
+            style={
+                "padding": "10px 12px",
+                "borderBottom": "1px solid var(--border-1)",
+                "cursor": "pointer",
+            },
+            children=[
+                html.Div(
+                    style={"display": "flex", "gap": 8, "alignItems": "center",
+                           "marginBottom": 4, "fontSize": 11, "color": "var(--fg-3)"},
+                    children=[
+                        html.Span(row.get("publisher") or "—"),
+                        html.Span("·"),
+                        html.Span(_format_relative_time(row.get("published_at"))),
+                    ],
+                ),
+                html.Div(
+                    row.get("title", ""),
+                    style={"fontSize": 13, "color": "var(--fg-1)", "lineHeight": 1.5,
+                           "fontWeight": 500},
+                ),
+                html.Div(
+                    desc,
+                    style={"fontSize": 12, "color": "var(--fg-2)", "lineHeight": 1.5,
+                           "marginTop": 4},
+                ) if desc else None,
+            ],
+        ),
+    )
+
+
+@callback(
+    Output("page-home-news", "children"),
+    Input("_url", "pathname"),
+)
+def _refresh_news(pathname: str | None):
+    if pathname != "/":
+        raise PreventUpdate
+    try:
+        df = newsq.fetch(scope_days=7, limit=10)
+    except Exception:
+        df = pd.DataFrame()
+    if df.empty:
+        return [
+            html.Div(
+                "최근 7일 수집된 뉴스가 없습니다. (collect_news 실행 후 표시됩니다)",
+                style={"padding": "16px", "color": "var(--fg-3)", "fontSize": 12},
+            )
+        ]
+    return [_render_news_item(r) for r in df.to_dict("records")]

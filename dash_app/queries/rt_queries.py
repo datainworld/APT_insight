@@ -367,6 +367,82 @@ def rents_by_complex(apt_id: str, months: int = 36) -> pd.DataFrame:
         return pd.read_sql(sql, conn, params={"apt_id": apt_id})
 
 
+def gap_metrics_by_complex(
+    apt_id: str, primary_area_m2: float | None, months: int = 6
+) -> dict | None:
+    """주력 면적(±1㎡) 기준 매매 / 전세 중위가 → 갭, 전세가율.
+
+    반환값(만원):
+        sale_median, jeonse_median, sale_count, jeonse_count, gap, jeonse_ratio
+    매매 또는 전세 표본이 0건이면 None.
+    """
+    if primary_area_m2 is None:
+        return None
+    sql = text(f"""
+        WITH sale AS (
+            SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY deal_amount) AS med,
+                   COUNT(*) AS n
+            FROM rt_trade
+            WHERE apt_id = :apt_id
+              AND deal_date >= CURRENT_DATE - INTERVAL '{int(months)} months'
+              AND exclusive_area BETWEEN :lo AND :hi
+        ),
+        jeonse AS (
+            SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY deposit) AS med,
+                   COUNT(*) AS n
+            FROM rt_rent
+            WHERE apt_id = :apt_id
+              AND deal_date >= CURRENT_DATE - INTERVAL '{int(months)} months'
+              AND exclusive_area BETWEEN :lo AND :hi
+              AND monthly_rent = 0
+        )
+        SELECT sale.med AS sale_median, sale.n AS sale_count,
+               jeonse.med AS jeonse_median, jeonse.n AS jeonse_count
+        FROM sale, jeonse
+    """)
+    with get_engine().connect() as conn:
+        row = conn.execute(
+            sql,
+            {
+                "apt_id": apt_id,
+                "lo": float(primary_area_m2) - 1.0,
+                "hi": float(primary_area_m2) + 1.0,
+            },
+        ).mappings().fetchone()
+    if not row:
+        return None
+    sale_med = row["sale_median"]
+    jeonse_med = row["jeonse_median"]
+    if sale_med is None or jeonse_med is None or sale_med <= 0:
+        return {
+            "sale_median": sale_med, "jeonse_median": jeonse_med,
+            "sale_count": row["sale_count"], "jeonse_count": row["jeonse_count"],
+            "gap": None, "jeonse_ratio": None,
+        }
+    return {
+        "sale_median": sale_med,
+        "jeonse_median": jeonse_med,
+        "sale_count": row["sale_count"],
+        "jeonse_count": row["jeonse_count"],
+        "gap": float(sale_med) - float(jeonse_med),
+        "jeonse_ratio": float(jeonse_med) / float(sale_med),
+    }
+
+
+def get_complex_names(apt_ids: list[str]) -> dict[str, str]:
+    """apt_id 리스트 → {apt_id: apt_name} 매핑. 최근 본 단지 칩 렌더링용."""
+    if not apt_ids:
+        return {}
+    sql = text("""
+        SELECT apt_id, apt_name
+        FROM rt_complex
+        WHERE apt_id = ANY(:ids)
+    """)
+    with get_engine().connect() as conn:
+        rows = conn.execute(sql, {"ids": list(apt_ids)}).mappings().fetchall()
+    return {r["apt_id"]: r["apt_name"] for r in rows}
+
+
 def recent_trades(apt_id: str, limit: int = 5) -> pd.DataFrame:
     """우측 패널 `최근 거래 N건` 용."""
     sql = text("""
