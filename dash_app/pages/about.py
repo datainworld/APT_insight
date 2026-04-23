@@ -127,7 +127,6 @@ def _section_data_sources() -> html.Section:
                     _stat("전월세 실거래", format_count(cov.get("rt_rent")), "rt_rent · 36M"),
                     _stat("네이버 활성 매물", format_count(cov.get("nv_active")), "nv_listing"),
                     _stat("단지 매핑", format_count(cov.get("mapping")), "complex_mapping"),
-                    _stat("뉴스 기사", format_count(cov.get("news")), "news_articles (수집 7d)"),
                     _stat("PDF 문서", format_count(pdf_n), "PGVector langchain_pg_embedding"),
                 ],
             ),

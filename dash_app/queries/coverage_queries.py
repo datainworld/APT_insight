@@ -22,8 +22,7 @@ def get_coverage() -> dict:
             (SELECT COUNT(*) FROM rt_rent)                                 AS rt_rent,
             (SELECT COUNT(*) FROM nv_complex)                              AS nv_complex,
             (SELECT COUNT(*) FROM nv_listing WHERE is_active = TRUE)       AS nv_active,
-            (SELECT COUNT(*) FROM complex_mapping)                         AS mapping,
-            (SELECT COUNT(*) FROM news_articles)                           AS news
+            (SELECT COUNT(*) FROM complex_mapping)                         AS mapping
     """)
     with get_engine().connect() as conn:
         row = dict(conn.execute(sql).mappings().fetchone() or {})
