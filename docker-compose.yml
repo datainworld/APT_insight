@@ -25,6 +25,21 @@ services:
       - uploads:/app/uploads
       - app_data:/app/data
 
+  dashboard:
+    build: .
+    restart: unless-stopped
+    command: ["gunicorn", "dash_app.app:server", "-b", "0.0.0.0:8050", "-w", "2", "--timeout", "120"]
+    ports:
+      - "8050:8050"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/uploads
+      - app_data:/app/data
+
 volumes:
   pgdata:
   uploads:

@@ -394,6 +394,31 @@ def _append_user_message(msgs: list, thread: str | None, text: str) -> tuple[lis
     return msgs, thread
 
 
+def _build_message_history(msgs: list) -> list:
+    """채팅 store 의 메시지 이력을 LangChain 메시지 리스트로 변환한다.
+
+    Dash background 콜백은 매 호출마다 새 프로세스에서 실행되어 InMemorySaver
+    의 체크포인트가 유실되므로, 멀티턴 문맥을 state["messages"] 에 직접 실어
+    보낸다. query_generator·synthesize 는 `[-8:]` 로 자체 슬라이싱함.
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    history: list = []
+    for m in msgs or []:
+        if not isinstance(m, dict):
+            continue
+        text = (m.get("text") or "").strip()
+        if not text:
+            continue
+        role = m.get("role")
+        kind = m.get("kind")
+        if role == "user":
+            history.append(HumanMessage(content=text))
+        elif role == "sys" and kind == "answer":
+            history.append(AIMessage(content=text))
+    return history
+
+
 # --- Chat: send button or Enter key ---
 @callback(
     Output("chat-msgs", "data"),
@@ -472,26 +497,18 @@ def _chat_invoke(busy, msgs, thread):
         raise PreventUpdate
     if not msgs or msgs[-1].get("kind") != "typing":
         return no_update, False
-    user_msg = None
-    for m in reversed(msgs[:-1]):
-        if m.get("role") == "user":
-            user_msg = m.get("text")
-            break
-    if not user_msg:
+    history = _build_message_history(msgs[:-1])
+    if not history or not any(m.type == "human" for m in history):
         msgs = msgs[:-1]
         return msgs, False
 
-    prompt = user_msg
-
     try:
-        from langchain_core.messages import HumanMessage
-
         graph = _get_graph()
         final_text = ""
         chart_json = None
         table_rows: list[dict] | None = None
         for event in graph.stream(
-            {"messages": [HumanMessage(content=prompt)]},
+            {"messages": history},
             {"recursion_limit": 50, "configurable": {"thread_id": thread}},
             stream_mode="updates",
         ):

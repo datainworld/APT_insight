@@ -26,6 +26,7 @@ dependencies = [
     "dash-mantine-components",
     "cachetools",
     "diskcache",
+    "gunicorn",
     # PDF
     "pymupdf",
     # Pipeline

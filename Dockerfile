@@ -20,6 +20,7 @@ COPY shared/ ./shared/
 COPY pipeline/ ./pipeline/
 COPY agents/ ./agents/
 COPY scripts/ ./scripts/
+COPY dash_app/ ./dash_app/
 COPY app.py chainlit.md ./
 COPY public/ ./public/
 COPY .chainlit/ ./.chainlit/
@@ -30,7 +31,7 @@ COPY data/maps/ ./assets/maps/
 # uploads 디렉토리
 RUN mkdir -p /app/uploads /app/data
 
-EXPOSE 8000
+EXPOSE 8000 8050
 
-# 기본: Chainlit 앱 실행 (pipeline 서비스에서 CMD override)
+# 기본: Chainlit 앱 실행 (pipeline/dashboard 서비스에서 CMD override)
 CMD ["chainlit", "run", "app.py", "--host", "0.0.0.0", "--port", "8000"]
