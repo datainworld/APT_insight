@@ -85,10 +85,12 @@ APT_insight_04/
 | `nv_complex` | 네이버 부동산 단지 정보 |
 | `nv_listing` | 네이버 매물 (trade_type: A1=매매, B1=전세, B2=월세) |
 | `complex_mapping` | rt_complex ↔ nv_complex 매핑 |
-| `pdf_document` | 사용자 업로드 PDF 문서 |
-| `pdf_chunk` | PDF 청크 + vector(768) 임베딩 |
+| `news_articles` | 네이버 검색 API 수집 부동산 뉴스 — 일일 갱신 (pipeline/collect_news.py) |
+| `langchain_pg_collection` / `langchain_pg_embedding` | PDF 벡터 저장 — LangChain PGVector 가 자체 관리 (별도 pdf_document/pdf_chunk 테이블 없음) |
 
-**없는 것:** apt_detail (K-Apt 상세정보 미사용), news_articles (뉴스 저장 안 함)
+**집계 Materialized View:** `mv_metrics_by_sgg`, `mv_metrics_by_complex` — run_daily.py 에서 REFRESH.
+
+**없는 것:** apt_detail (K-Apt 상세정보 미사용)
 
 ---
 
@@ -96,7 +98,7 @@ APT_insight_04/
 
 ```
 Supervisor (StateGraph)
-├─ SQL Agent    — DB 7테이블 자연어 질의 (SQLDatabaseToolkit)
+├─ SQL Agent    — DB 테이블(rt_*, nv_*, complex_mapping, news_articles) 자연어 질의
 ├─ RAG Agent    — PDF 벡터 검색 (pdf_chunk, PGVector)
 ├─ News Agent   — 네이버 검색 API 실시간 뉴스 (DB 저장 없음)
 └─ Chart Tool   — Plotly 차트 생성 (cl.Plotly 렌더링)

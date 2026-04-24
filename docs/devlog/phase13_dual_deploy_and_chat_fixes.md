@@ -202,3 +202,39 @@ IP 로만 접근 시도하면 Traefik 이 `Host: apt.deepdata.kr` 룰만 갖고 
 3. **Dash `layout` 모듈 변수는 임포트 시 즉시 평가됨**. DB 쿼리는 callback 으로 옮기거나 함수형 layout 으로.
 4. **Hostinger VPS 는 호스팅사 패널 방화벽이 따로 있음**. UFW 만 보면 안 됨.
 5. **Traefik 라우팅은 Host 헤더 기반**. IP 로만 접근 시도하면 도메인 라우터가 매칭 안 됨 — 도메인 이용이 정석.
+
+---
+
+## 6. 추가 수정 — 프로덕션 DB 스키마 마이그레이션 누락
+
+배포 직후 홈 페이지의 "최근 7일 부동산 뉴스" 위젯이 빈 상태로 표시됨 (`collect_news 실행 후 표시됩니다` fallback 메시지). 조사 결과:
+
+- 프로덕션 DB 는 Phase 5 이관 시점(2026-04-16) 의 6 테이블(rt_*, nv_*, complex_mapping, langchain_*)만 존재.
+- Phase 9+ 대시보드에서 추가된 **`news_articles` + `mv_metrics_by_sgg` + `mv_metrics_by_complex`** 가 프로덕션 DB 에 생성되지 않았음.
+
+### 6.1 조치
+
+[scripts/init_db.py](../../scripts/init_db.py) 는 모든 CREATE 문이 `IF NOT EXISTS` 로 idempotent → Chainlit 컨테이너 안에서 실행해 누락분만 생성:
+
+```bash
+docker exec <chainlit_container> python -m scripts.init_db
+```
+
+결과: `news_articles` + 2 MV 생성. 이어서 `python -m pipeline.collect_news` 1회 실행 → 33건 수집·적재.
+
+### 6.2 earlier 잘못된 수정 되돌림
+
+Phase 13 초반([c95795c](../../.git/logs/refs/heads/main))에 "news_articles 는 설계상 없는 테이블" 로 오판해 제거했던 것들을 복구:
+- [dash_app/queries/coverage_queries.py](../../dash_app/queries/coverage_queries.py) — news COUNT 서브쿼리 복원
+- [dash_app/pages/about.py](../../dash_app/pages/about.py) — '뉴스 기사' stat 복원
+- [CLAUDE.md](../../CLAUDE.md) — 테이블 목록에 `news_articles`, `langchain_pg_*` 반영 + `mv_*` MV 명시 + "없는 것" 항목에서 news_articles 삭제
+
+### 6.3 후속 과제
+
+- Dokploy Schedules 에 `0 3 * * *` (KST) 로 `python -m pipeline.run_daily` 등록 필요 (news + rt + nv 일일 갱신). 지금은 수동 1회 실행만 된 상태.
+- mv_metrics_* 는 run_daily.py 에서 `REFRESH MATERIALIZED VIEW CONCURRENTLY` 가 돌아야 최신화. 현재는 비어있는 초기 상태 → 별도 REFRESH 필요.
+
+### 6.4 교훈
+
+- **프로덕션 DB 마이그레이션은 코드 변경과 별도 트랙**. `init_db.py` 에 새 테이블을 추가해도 프로덕션은 자동 적용 안 됨 → 배포 절차에 `python -m scripts.init_db` 를 포함시켜야 함.
+- **CLAUDE.md 는 정기적으로 실제 스키마와 대조**. 오래된 "없는 것" 진술이 새 기능 개발의 오판 원인이 됨.
