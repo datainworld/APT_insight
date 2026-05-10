@@ -1,16 +1,18 @@
 """파이프라인 실행 상태 조회 — data/reports/ 파일시스템 기반.
 
-Dash 사이드바의 "마지막 갱신" 표시는 이 모듈을 단일 신뢰 소스로 사용한다.
-data/reports/{YYYY-MM-DD}.json 은 pipeline/run_daily.py 가 매일 03:00 KST 실행 후
-저장하는 일일 리포트 파일이다.
+Dash 사이드바의 "마지막 갱신" 표시 + /about 페이지의 데이터 업데이트 현황 섹션이
+이 모듈을 단일 신뢰 소스로 사용한다. data/reports/{YYYY-MM-DD}.json 은
+pipeline/run_daily.py 가 매일 03:00 KST 실행 후 저장하는 일일 리포트 파일이다.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 from shared.config import BASE_DIR
 
@@ -53,3 +55,29 @@ def is_stale(
         return True
     today = today or date.today()
     return (today - latest).days > threshold_days
+
+
+def read_report(d: date) -> dict[str, Any] | None:
+    """해당 날짜의 리포트 JSON 을 dict 로 반환. 없거나 파싱 실패 시 None."""
+    path = REPORTS_DIR / f"{d.isoformat()}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("read_report: failed to read %s: %s", path, e)
+        return None
+
+
+def recent_reports(
+    days: int = 14, today: date | None = None
+) -> list[tuple[date, dict[str, Any] | None]]:
+    """최근 N일치 (날짜, 리포트dict | None) 리스트. 오래된 → 최신 순.
+
+    파일이 없는 날은 None 으로 채워서 누락된 날을 시각적으로 구분할 수 있게 한다.
+    """
+    today = today or date.today()
+    return [
+        (today - timedelta(days=i), read_report(today - timedelta(days=i)))
+        for i in range(days - 1, -1, -1)
+    ]

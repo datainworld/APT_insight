@@ -77,3 +77,59 @@ def test_is_stale_custom_threshold() -> None:
 
     assert pipeline_status.is_stale(three_days_ago, today=today, threshold_days=3) is False
     assert pipeline_status.is_stale(three_days_ago, today=today, threshold_days=2) is True
+
+
+def test_read_report_returns_dict_when_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline_status, "REPORTS_DIR", tmp_path)
+    (tmp_path / "2026-05-10.json").write_text(
+        '{"date":"2026-05-10","status":"success"}', encoding="utf-8"
+    )
+
+    report = pipeline_status.read_report(date(2026, 5, 10))
+    assert report == {"date": "2026-05-10", "status": "success"}
+
+
+def test_read_report_returns_none_when_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline_status, "REPORTS_DIR", tmp_path)
+
+    assert pipeline_status.read_report(date(2026, 5, 10)) is None
+
+
+def test_read_report_returns_none_on_invalid_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline_status, "REPORTS_DIR", tmp_path)
+    (tmp_path / "2026-05-10.json").write_text("not-json", encoding="utf-8")
+
+    assert pipeline_status.read_report(date(2026, 5, 10)) is None
+
+
+def test_recent_reports_returns_oldest_to_newest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline_status, "REPORTS_DIR", tmp_path)
+    today = date(2026, 5, 10)
+    (tmp_path / "2026-05-08.json").write_text('{"status":"success"}', encoding="utf-8")
+    (tmp_path / "2026-05-10.json").write_text('{"status":"error"}', encoding="utf-8")
+
+    history = pipeline_status.recent_reports(days=3, today=today)
+
+    assert [d for d, _ in history] == [date(2026, 5, 8), date(2026, 5, 9), date(2026, 5, 10)]
+    assert history[0][1] == {"status": "success"}
+    assert history[1][1] is None  # 2026-05-09 is missing
+    assert history[2][1] == {"status": "error"}
+
+
+def test_recent_reports_default_14_days(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline_status, "REPORTS_DIR", tmp_path)
+
+    history = pipeline_status.recent_reports(today=date(2026, 5, 10))
+
+    assert len(history) == 14
+    assert all(r is None for _, r in history)

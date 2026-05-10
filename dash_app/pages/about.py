@@ -17,6 +17,7 @@ import dash
 from dash import dcc, html
 
 from dash_app.components.formatters import format_count
+from dash_app.components.pipeline_health import pipeline_health_section
 from dash_app.config import CHIP_PROMPTS, PAGES
 from dash_app.glossary.terms import GLOSSARY
 from dash_app.queries.coverage_queries import get_coverage, get_pdf_count
@@ -381,6 +382,7 @@ layout = html.Main(
                 _section_hero(),
                 _section_features(),
                 _section_data_sources(),
+                pipeline_health_section(),
                 _section_glossary(),
                 _section_chat(),
                 _section_rag(),

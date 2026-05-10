@@ -904,3 +904,110 @@ body { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-1
   background: var(--bg-2); border: 1px dashed var(--border-1);
   color: var(--fg-3); font-size: var(--text-sm);
 }
+
+/* ============================================================ */
+/* Pipeline Health (about page · 데이터 업데이트 현황 섹션)        */
+/* ============================================================ */
+
+.pipeline-empty {
+  padding: 14px 18px; border-radius: 8px;
+  background: var(--bg-2); border: 1px dashed var(--border-1);
+  color: var(--fg-3); font-size: var(--text-sm); margin-bottom: 12px;
+}
+
+.pipeline-overall {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid var(--border-1);
+  margin-bottom: 14px;
+}
+.pipeline-overall-date {
+  font-family: var(--font-mono); font-size: 16px;
+  color: var(--fg-1); font-weight: 600;
+}
+.pipeline-overall-meta {
+  margin-left: auto; color: var(--fg-2); font-size: 12px;
+}
+.pipeline-overall-meta b { color: var(--fg-1); font-weight: 600; }
+
+.pipeline-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: .2px;
+  text-transform: uppercase;
+}
+.pipeline-badge-success { background: rgba(76, 175, 80, .15); color: var(--pos); border: 1px solid rgba(76, 175, 80, .35); }
+.pipeline-badge-partial { background: rgba(255, 152,  0, .15); color: var(--warn); border: 1px solid rgba(255, 152,  0, .35); }
+.pipeline-badge-error   { background: rgba(239,  83, 80, .15); color: var(--neg); border: 1px solid rgba(239,  83, 80, .35); }
+.pipeline-badge-missing { background: var(--bg-3, #2a2a2a); color: var(--fg-3); border: 1px solid var(--border-1); }
+
+.pipeline-stages {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin-bottom: 14px;
+}
+.pipeline-stage {
+  background: var(--bg-2); border: 1px solid var(--border-1);
+  border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pipeline-stage-name {
+  font-size: 12px; color: var(--fg-2); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+.pipeline-stage-note { font-size: 11px; color: var(--fg-3); }
+.pipeline-stage-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.pipeline-stage-list li {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px;
+}
+.pipeline-stage-l { color: var(--fg-2); }
+.pipeline-stage-v {
+  font-family: var(--font-mono); font-weight: 600; color: var(--fg-1);
+}
+
+.pipeline-day-strip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid var(--border-1);
+  margin-bottom: 12px;
+}
+.pipeline-day-label {
+  font-size: 11px; color: var(--fg-2); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+.pipeline-day-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.pipeline-day {
+  width: 26px; height: 26px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  border: 1px solid transparent; cursor: default;
+}
+.pipeline-day-success { background: rgba(76, 175, 80, .25); color: var(--pos); border-color: rgba(76, 175, 80, .4); }
+.pipeline-day-partial { background: rgba(255, 152,  0, .25); color: var(--warn); border-color: rgba(255, 152,  0, .4); }
+.pipeline-day-error   { background: rgba(239,  83, 80, .25); color: var(--neg); border-color: rgba(239,  83, 80, .4); }
+.pipeline-day-missing { background: var(--bg-3, #1f1f1f); color: var(--fg-3); border-color: var(--border-1); }
+
+.pipeline-errors {
+  margin-top: 6px; padding: 10px 14px; border-radius: 8px;
+  background: rgba(239, 83, 80, .08); border: 1px solid rgba(239, 83, 80, .25);
+}
+.pipeline-errors > summary {
+  cursor: pointer; font-size: 12px; color: var(--neg); font-weight: 600;
+  list-style: none;
+}
+.pipeline-errors > summary i { margin-right: 6px; }
+.pipeline-error-row {
+  margin-top: 8px; font-size: 12px; color: var(--fg-2);
+}
+.pipeline-error-row code {
+  display: block; margin-top: 4px; padding: 8px 10px;
+  background: var(--bg-code); border-radius: 6px;
+  font-family: var(--font-mono); font-size: 11px;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .pipeline-stages { grid-template-columns: repeat(2, 1fr); }
+}

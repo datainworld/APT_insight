@@ -11,6 +11,7 @@ from dash import Dash, DiskcacheManager, dcc, html
 # Global callbacks (register via side effect)
 from dash_app.callbacks import filters as _filters  # noqa: F401
 from dash_app.callbacks import navigation as _nav  # noqa: F401
+from dash_app.callbacks import pipeline_health as _pipeline_health  # noqa: F401
 from dash_app.callbacks import sidebar_status as _sidebar_status  # noqa: F401
 from dash_app.callbacks import theme as _theme  # noqa: F401
 from dash_app.components.chat_panel import callbacks as _chat_cb  # noqa: F401
