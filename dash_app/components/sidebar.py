@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from datetime import date
 
 from dash import html
 
@@ -48,11 +47,10 @@ def _page_nav() -> html.Nav:
 
 def sidebar(
     initial_sido: str = "서울특별시",
-    last_refresh: date | None = None,
     show_filter: bool = True,
 ) -> html.Aside:
     """좌측 사이드바. show_filter=False 인 페이지(예: /about)는 필터를 숨긴다."""
     children: list = [_page_nav()]
     if show_filter:
-        children.append(filter_panel(initial_sido=initial_sido, last_refresh=last_refresh))
+        children.append(filter_panel(initial_sido=initial_sido))
     return html.Aside(className="filter-side", children=children)

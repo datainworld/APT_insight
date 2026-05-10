@@ -10,9 +10,15 @@ def test_rt_queries_exports_filter_and_core_functions() -> None:
 
     assert hasattr(q, "Filter")
     for fn in ("list_sgg", "list_dong", "trade_trend", "price_change",
-               "sgg_counts", "top_complexes", "kpi_summary",
-               "last_refresh_timestamp"):
+               "sgg_counts", "top_complexes", "kpi_summary"):
         assert callable(getattr(q, fn))
+
+
+def test_pipeline_status_exports() -> None:
+    from dash_app.queries import pipeline_status as q
+
+    assert callable(q.last_refresh_timestamp)
+    assert callable(q.is_stale)
 
 
 def test_nv_queries_exports() -> None:

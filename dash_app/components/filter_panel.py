@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 from dash import dcc, html
 
 from dash_app.config import AREA_OPTIONS, DEAL_OPTIONS, DEFAULT_SIDO, SIDO_OPTIONS
@@ -21,7 +19,6 @@ def _fa(icon: str, extra: str = "") -> html.I:
 
 def filter_panel(
     initial_sido: str = DEFAULT_SIDO,
-    last_refresh: date | None = None,
 ) -> html.Div:
     return html.Div(
         className="filter-body",
@@ -132,7 +129,19 @@ def filter_panel(
                 children=[
                     html.Div("마지막 갱신"),
                     html.Div(
-                        last_refresh.strftime("%Y-%m-%d") if last_refresh else "—",
+                        children=[
+                            html.Span("—", id="sidebar-last-refresh-text"),
+                            html.I(
+                                className="fa-solid fa-triangle-exclamation",
+                                id="sidebar-last-refresh-warning",
+                                style={
+                                    "display": "none",
+                                    "color": "var(--warn, #ff9800)",
+                                    "marginLeft": "6px",
+                                },
+                                title="",
+                            ),
+                        ],
                         style={"color": "var(--fg-1)"},
                     ),
                 ],

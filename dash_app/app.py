@@ -11,12 +11,12 @@ from dash import Dash, DiskcacheManager, dcc, html
 # Global callbacks (register via side effect)
 from dash_app.callbacks import filters as _filters  # noqa: F401
 from dash_app.callbacks import navigation as _nav  # noqa: F401
+from dash_app.callbacks import sidebar_status as _sidebar_status  # noqa: F401
 from dash_app.callbacks import theme as _theme  # noqa: F401
 from dash_app.components.chat_panel import callbacks as _chat_cb  # noqa: F401
 from dash_app.components.chat_panel import upload_callbacks as _chat_upload  # noqa: F401
 from dash_app.components.chat_panel.layout import chat_components
 from dash_app.components.sidebar import sidebar
-from dash_app.queries.rt_queries import last_refresh_timestamp
 
 FONT_AWESOME = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
 
@@ -36,11 +36,6 @@ def _root_stores() -> list[dcc.Store]:
 
 
 def create_app() -> Dash:
-    try:
-        last_refresh = last_refresh_timestamp()
-    except Exception:
-        last_refresh = None
-
     # Background callbacks (채팅 invoke 의 장시간 실행 + 중단 기능용)
     _cache = diskcache.Cache("./.cache/dash_bg")
     background_manager = DiskcacheManager(_cache)
@@ -60,7 +55,7 @@ def create_app() -> Dash:
         className="fd-shell dark-theme",
         children=[
             dcc.Location(id="_url", refresh=False),
-            sidebar(last_refresh=last_refresh),
+            sidebar(),
             dash.page_container,
             *chat_components(),
             *_root_stores(),

@@ -8,7 +8,6 @@ directly. All monetary values are stored in 만원.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from functools import lru_cache
 
 import pandas as pd
@@ -270,12 +269,6 @@ def kpi_summary(f: Filter) -> dict:
 
     avg = int(round(total / uniq)) if uniq else 0
     return {"total": total, "uniq": uniq, "avg": avg, "max": int(max_v)}
-
-
-def last_refresh_timestamp() -> date | None:
-    with get_engine().connect() as conn:
-        row = conn.execute(text("SELECT MAX(deal_date) FROM rt_trade")).scalar()
-    return row
 
 
 # ---------------------------------------------------------------------------
